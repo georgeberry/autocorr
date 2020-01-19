@@ -1,0 +1,166 @@
+---
+title: "make plots"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(cowplot)
+```
+
+```{r}
+df_main_node = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_runs.csv'
+) %>%
+  mutate(
+    sim='main',
+    level='node'
+  )
+df_main_edge = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_runs.csv'
+) %>%
+  mutate(
+    sim='main',
+    level='edge'
+  )
+df_weirdsamp_node = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_weird_samp_runs.csv'
+)  %>%
+  mutate(
+    sim='weirdsamp',
+    level='node'
+  )
+df_weirdsamp_edge = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_weird_samp_runs.csv'
+) %>%
+  mutate(
+    sim='weirdsamp',
+    level='edge'
+  )
+df_indep_node = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_indep_runs.csv'
+) %>%
+  mutate(
+    sim='indep',
+    level='node'
+  )
+df_indep_edge = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_indep_runs.csv'
+) %>%
+  mutate(
+    sim='indep',
+    level='edge'
+  )
+df_degcorr_node = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_deg_corr_runs.csv'
+) %>%
+  mutate(
+    sim='degcorr',
+    level='node'
+  )
+df_degcorr_edge = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_deg_corr_runs.csv'
+) %>%
+  mutate(
+    sim='degcorr',
+    level='edge'
+  )
+df_unobs_node = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_unobs_runs.csv'
+) %>%
+  mutate(
+    sim='unobs',
+    level='node'
+  )
+df_unobs_edge = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_unobs_runs.csv'
+) %>%
+  mutate(
+    sim='unobs',
+    level='edge'
+  )
+```
+
+
+```{r}
+df_mae = bind_rows(
+  df_main_node,
+  df_main_edge,
+  df_weirdsamp_node,
+  df_weirdsamp_edge,
+  df_indep_node,
+  df_indep_edge,
+  df_degcorr_node,
+  df_degcorr_edge,
+  df_unobs_node,
+  df_unobs_edge
+) %>%
+  mutate(
+    Y_hat_node=abs(Y_hat_node - Y_true) / Y_true,
+    Y_hat_node_nonetwork=abs(Y_hat_node_nonetwork - Y_true) / Y_true,
+    Y_hat_edge=abs(Y_hat_edge - Y_true) / Y_true,
+    Y_hat_egoalter=abs(Y_hat_egoalter - Y_true) / Y_true,
+    Y_hat_egoalter_passed=abs(Y_hat_egoalter_passed - Y_true) / Y_true,
+  ) %>%
+  select(
+    sim,
+    level,
+    Y_hat_node,
+    Y_hat_node_nonetwork,
+    Y_hat_edge,
+    Y_hat_egoalter,
+    Y_hat_egoalter_passed
+  ) %>%
+  pivot_longer(Y_hat_node:Y_hat_egoalter_passed, names_to='model', values_to='val')
+
+df_mae %>%
+  # filter(sim != 'weirdsamp') %>%
+  ggplot(aes(x=sim, y=val, color=model)) +
+  geom_boxplot() +
+  facet_wrap(~level) +
+  coord_flip() +
+  theme_cowplot()
+```
+
+```{r}
+df_bias = bind_rows(
+  df_main_node,
+  df_main_edge,
+  df_weirdsamp_node,
+  df_weirdsamp_edge,
+  df_indep_node,
+  df_indep_edge,
+  df_degcorr_node,
+  df_degcorr_edge,
+  df_unobs_node,
+  df_unobs_edge
+) %>%
+  mutate(
+    Y_hat_node=(Y_hat_node - Y_true) / Y_true,
+    Y_hat_node_nonetwork=(Y_hat_node_nonetwork - Y_true) / Y_true,
+    Y_hat_edge=(Y_hat_edge - Y_true) / Y_true,
+    Y_hat_egoalter=(Y_hat_egoalter - Y_true) / Y_true,
+    Y_hat_egoalter_passed=(Y_hat_egoalter_passed - Y_true) / Y_true,
+  ) %>%
+  select(
+    sim,
+    level,
+    Y_hat_node,
+    Y_hat_node_nonetwork,
+    Y_hat_edge,
+    Y_hat_egoalter,
+    Y_hat_egoalter_passed
+  ) %>%
+  pivot_longer(Y_hat_node:Y_hat_egoalter_passed, names_to='model', values_to='val')
+
+df_bias %>%
+  # filter(sim != 'weirdsamp') %>%
+  ggplot(aes(x=sim, y=val, color=model)) +
+  geom_hline(yintercept=0, linetype='dotdash') +
+  geom_boxplot() +
+  facet_wrap(~level) +
+  coord_flip() +
+  theme_cowplot()
+```
+

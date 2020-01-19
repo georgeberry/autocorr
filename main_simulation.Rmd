@@ -523,8 +523,8 @@ write_csv(
 # Plots
 
 ```{r}
-df_nodesamp = read_csv('/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_runs.csv')
-df_edgesamp = read_csv('/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_runs.csv')
+df_nodesamp_runs = read_csv('/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_runs.csv')
+df_edgesamp_runs = read_csv('/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_runs.csv')
 ```
 
 ```{r}
@@ -696,7 +696,8 @@ df_edgesamp_bias %>%
   ggplot(aes(x=model, y=value)) +
   geom_boxplot() +
   geom_hline(yintercept=0, linetype='dashed') +
-  coord_flip()
+  coord_flip() +
+  theme_cowplot()
 ```
 
 ```{r}

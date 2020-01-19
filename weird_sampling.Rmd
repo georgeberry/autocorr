@@ -3,8 +3,6 @@ title: "minexamp"
 output: html_document
 ---
 
-Degcorr sims
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
@@ -33,7 +31,7 @@ fn_par_bootstrap = function(fn, n_reps, ...) {
 ```
 
 ```{r}
-fn_dgp_deg_corr_nodesamp = function(n_nodes=4000, node_samp_frac=0.2) {
+fn_dgp_weird_samp_nodesamp = function(n_nodes=4000, node_samp_frac=0.2) {
   # Creates a graph and draws Y = f(X, Z), where X ~ N(0, 1) and
   # Z is the ego-network avg of the observed X
   g = play_barabasi_albert(n_nodes, 0.8, 5)
@@ -48,8 +46,15 @@ fn_dgp_deg_corr_nodesamp = function(n_nodes=4000, node_samp_frac=0.2) {
     activate(nodes) %>%
     mutate(
       X = rnorm(n()),
+      # ZZ = rnorm(n()), 
+      Z = map_local_dbl(
+        .f = function(neighborhood, ...) {
+          max(as_tibble(neighborhood, active='nodes')$X)
+        }
+      ),
+      Z = (Z - mean(Z)) / sd(Z),
       outdeg = centrality_degree(mode='out'),
-      Y_prob_true = 1 / (1 + exp(- 2 * X - log1p(outdeg))),
+      Y_prob_true = 1 / (1 + exp(- 2 * X - Z)), #  - log1p(outdeg))),
       outdeg_inv = 1 / outdeg,
       indeg = centrality_degree(mode='in'),
       indeg_inv = 1 / indeg,
@@ -58,7 +63,9 @@ fn_dgp_deg_corr_nodesamp = function(n_nodes=4000, node_samp_frac=0.2) {
         1,
         Y_prob_true
       ),
-      gt = rbinom(n(), 1, node_samp_frac)
+      # probably we see the true value
+      Q_prob = 1 / (1 + exp(1.6 - 0.03 * outdeg - 0.2 * X)),
+      gt = rbinom(graph_order(), 1, Q_prob)
     ) %>%
     activate(edges) %>%
     mutate(
@@ -82,8 +89,7 @@ fn_dgp_deg_corr_nodesamp = function(n_nodes=4000, node_samp_frac=0.2) {
   return(g)
 }
 
-
-fn_dgp_deg_corr_edgesamp = function(n_nodes=4000, edge_samp_frac=0.05) {
+fn_dgp_weird_samp_edgesamp = function(n_nodes=4000, edge_samp_frac=0.05) {
   # Creates a graph and draws Y = f(X, Z), where X ~ N(0, 1) and
   # Z is the ego-network avg of the observed X
   g = play_barabasi_albert(n_nodes, 0.8, 5)
@@ -98,8 +104,15 @@ fn_dgp_deg_corr_edgesamp = function(n_nodes=4000, edge_samp_frac=0.05) {
     activate(nodes) %>%
     mutate(
       X = rnorm(n()),
+      # ZZ = rnorm(n()), 
+      Z = map_local_dbl(
+        .f = function(neighborhood, ...) {
+          max(as_tibble(neighborhood, active='nodes')$X)
+        }
+      ),
+      Z = (Z - mean(Z)) / sd(Z),
       outdeg = centrality_degree(mode='out'),
-      Y_prob_true = 1 / (1 + exp(- 2 * X - log1p(outdeg))),
+      Y_prob_true = 1 / (1 + exp(- 2 * X - Z)), #  - log1p(outdeg))),
       outdeg_inv = 1 / outdeg,
       indeg = centrality_degree(mode='in'),
       indeg_inv = 1 / indeg,
@@ -122,10 +135,19 @@ fn_dgp_deg_corr_edgesamp = function(n_nodes=4000, edge_samp_frac=0.05) {
       indeg_inv_nbr = .N()$indeg_inv[to],
       outdeg_inv_ego = .N()$outdeg_inv[from],
       outdeg_inv_nbr = .N()$outdeg_inv[to],
-      # sample at edge level
-      gt = rbinom(n(), 1, edge_samp_frac),
       X_ego = .N()$X[from],
       X_nbr = .N()$X[to],
+      # sample at edge level
+      # probably we see the true value
+      # 1 / (1 + exp(1.6 - 0.03 * outdeg - 0.2 * X))
+      Q_prob = 1 / (1 + exp(
+        7.4 -
+        0.03 * outdeg_ego -
+        0.03 * indeg_nbr - 
+        0.1 * X_ego - 
+        0.1 * X_nbr
+      )),
+      gt = rbinom(graph_size(), 1, Q_prob)
     ) %>%
     # for any node who is part of a gt edge, give that node gt=1
     activate(nodes) %>%
@@ -160,7 +182,12 @@ fn_oos = function(fn_g) {
   
   g = fn_g()
   df_nodes = g %>% activate(nodes) %>% as_tibble()
+  print(sum(df_nodes$gt))
+  print(mean(df_nodes$gt))
+  
   df_edges = g %>% activate(edges) %>% as_tibble()
+  print(sum(df_edges$gt))
+  print(mean(df_edges$gt))
 
   # node no network features
   node_mod = glm(
@@ -189,11 +216,18 @@ fn_oos = function(fn_g) {
   )
   
   # edge
+  edgeweight_mod = glm(
+    gt ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego,
+    family='binomial',
+    data=df_edges
+  )
+  df_edges$incl_weight = 1 / predict(edgeweight_mod, type='response')
   edge_mod = glm(
     Y ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego,
     family='binomial',
     data=df_edges %>%
-      filter(gt == 1)
+      filter(gt == 1),
+    weights=incl_weight
   )
   Y_hat_edge = sum(
     df_edges$outdeg_inv_ego *
@@ -311,151 +345,46 @@ fn_oos = function(fn_g) {
     )
   )
 }
+```
 
-
-fn_compute_performance_metrics = function(true_vals, probs) {
-  auc_val = as.numeric(auc(roc(true_vals, probs)))
-  # zero-one predictions
-  preds = probs > 0.5
-  prec_val = sum(true_vals * preds) / sum(preds)
-  rec_val = sum(true_vals * preds) / sum(true_vals)
-  acc_val = sum(true_vals == preds) / length(true_vals)
-  return(
-    data.frame(
-      auc=auc_val,
-      precision=prec_val,
-      recall=rec_val,
-      accuracy=acc_val
-    )
-  )
-}
-
-fn_performance = function(fn_g) {
-  # fit models, evlauate performance metrics
-  # node no network features (baseline)
-  # node
-  # edge
-  # ego-then-alter
-  # ego-then-alter (with prob passed to alter model)
-  
-  g = fn_g()
-  df_nodes = g %>% activate(nodes) %>% as_tibble()
-  df_edges = g %>% activate(edges) %>% as_tibble()
-
-  # node no network features
-  node_mod = glm(
-    Y ~ X, # + log1p(outdeg),
-    family='binomial',
-    data=df_nodes %>%
-      filter(gt == 1)
-  )
-  node_preds = predict(
-    node_mod,
-    newdata=df_nodes %>%
-      filter(gt == 0),
-    type='response',
-  )
-  node_nonetwork_perf = fn_compute_performance_metrics(
-    df_nodes %>%
-      filter(gt == 0) %>%
-      .$Y,
-    node_preds
-  ) %>%
-    mutate(
-      model='node_nonetwork'
-    )
-  
-  # nodemod
-  node_mod = glm(
-    Y ~ X + outdeg_inv + outdeg,
-    family='binomial',
-    data=df_nodes %>%
-      filter(gt == 1)
-  )
-  node_preds = predict(
-    node_mod,
-    newdata=df_nodes %>%
-      filter(gt == 0),
-    type='response',
-  )
-  node_perf = fn_compute_performance_metrics(
-    df_nodes %>%
-      filter(gt == 0) %>%
-      .$Y,
-    node_preds
-  ) %>%
-    mutate(
-      model='node'
-    )
-  
-  # ego then alter
-  ego_mod = glm(
-    Y_ego ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego,
-    family='binomial',
-    data=df_edges %>%
-      filter(gt_ego == 1)
-  )
-  df_edges$ego_preds = predict(
-    ego_mod,
-    newdata=df_edges,
-    type='response',
-  )
-  df_edges = df_edges %>%
-    group_by(from) %>%
-    summarize(
-      gt_ego=mean(gt_ego),
-      ego_preds=mean(ego_preds),
-      Y_ego=mean(Y_ego)
-    )
-  print(head(df_edges))
-  egoalter_perf = fn_compute_performance_metrics(
-    df_edges %>%
-      filter(gt_ego == 0) %>%
-      .$Y_ego,
-    df_edges %>%
-      filter(gt_ego == 0) %>%
-      .$ego_preds
-  ) %>%
-    mutate(
-      model='egoalter'
-    )
-
-  return(
-    bind_rows(
-      node_perf,
-      node_nonetwork_perf,
-      egoalter_perf
-    )
-  )
-}
+```{r}
+fn_oos(fn_dgp_weird_samp_edgesamp)
 ```
 
 
+
 ```{r}
-df_nodesamp_runs = fn_par_bootstrap(fn_oos, 500, fn_dgp_deg_corr_nodesamp) 
+tmp = fn_dgp_weird_samp_edgesamp()
+```
+
+```{r}
+tmp_edge = tmp %>% activate(edges) %>% as_tibble()
+```
+
+```{r}
+mod1 = glm(Y ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego, family='binomial', data=tmp_edge)
+```
+
+```{r}
+wght_mod = glm(gt ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego, family='binomial', data=tmp_edge)
+
+mod2 = glm(Y ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego, family='binomial', data=tmp_edge %>% filter(gt == 1))
+```
+
+```{r}
+df_nodesamp_runs = fn_par_bootstrap(fn_oos, 500, fn_dgp_weird_samp_nodesamp) 
 write_csv(
   df_nodesamp_runs,
-  '/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_deg_corr_runs.csv'
+  '/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_weird_samp_runs.csv'
 )
 ```
 
 
 ```{r}
-df_edgesamp_runs = fn_par_bootstrap(fn_oos, 500, fn_dgp_deg_corr_edgesamp)
+df_edgesamp_runs = fn_par_bootstrap(fn_oos, 48, fn_dgp_weird_samp_edgesamp)
 write_csv(
   df_edgesamp_runs,
-  '/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_deg_corr_runs.csv'
-)
-```
-
-
-# Perf
-
-```{r}
-df_node_perf = fn_par_bootstrap(fn_performance, 500, fn_dgp_corr_nodesamp)
-write_csv(
-  df_node_perf,
-  '/Users/georgeberry/Dropbox/project-autocorr/data/node_perf.csv'
+  '/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_weird_samp_runs.csv'
 )
 ```
 
@@ -463,8 +392,8 @@ write_csv(
 # Plots
 
 ```{r}
-df_nodesamp = read_csv('/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_deg_corr_runs.csv')
-df_edgesamp = read_csv('/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_deg_corr_runs.csv')
+df_nodesamp_runs = read_csv('/Users/georgeberry/Dropbox/project-autocorr/data/nodesamp_weird_samp_runs.csv')
+df_edgesamp_runs = read_csv('/Users/georgeberry/Dropbox/project-autocorr/data/edgesamp_weird_samp_runs.csv')
 ```
 
 ```{r}
@@ -619,24 +548,6 @@ df_edgesamp_bias = df_edgesamp_runs %>%
 ```
 
 
-```{r}
-df_nodesamp_abs %>%
-  gather(model, value) %>%
-  ggplot(aes(x=model, y=value)) +
-  geom_boxplot() +
-  geom_hline(yintercept=0, linetype='dashed') +
-  coord_flip()
-```
-
-```{r}
-df_nodesamp_bias %>%
-  gather(model, value) %>%
-  ggplot(aes(x=model, y=value)) +
-  geom_boxplot() +
-  geom_hline(yintercept=0, linetype='dashed') +
-  coord_flip()
-```
-
 
 ```{r}
 df_edgesamp_bias %>%
@@ -649,6 +560,24 @@ df_edgesamp_bias %>%
 
 ```{r}
 df_edgesamp_abs %>%
+  gather(model, value) %>%
+  ggplot(aes(x=model, y=value)) +
+  geom_boxplot() +
+  geom_hline(yintercept=0, linetype='dashed') +
+  coord_flip()
+```
+
+```{r}
+df_nodesamp_abs %>%
+  gather(model, value) %>%
+  ggplot(aes(x=model, y=value)) +
+  geom_boxplot() +
+  geom_hline(yintercept=0, linetype='dashed') +
+  coord_flip()
+```
+
+```{r}
+df_nodesamp_bias %>%
   gather(model, value) %>%
   ggplot(aes(x=model, y=value)) +
   geom_boxplot() +
