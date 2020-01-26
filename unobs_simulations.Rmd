@@ -445,11 +445,6 @@ fn_performance = function(fn_g) {
 ```
 
 
-```{r}
-fn_oos(fn_dgp_corr_unobs_edgesamp)
-```
-
-
 
 ```{r}
 df_nodesamp_runs = fn_par_bootstrap(fn_oos, 500, fn_dgp_corr_unobs_nodesamp) 
