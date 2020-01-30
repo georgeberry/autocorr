@@ -123,6 +123,29 @@ fn_oos = function(fn_g) {
     df_edges$Y_nbr_hat
   )
 
+  # ego then alter hardmode
+  ego_mod = glm(
+    Y_ego ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego,
+    family='binomial',
+    data=df_edges %>%
+      filter(gt_ego == 1) %>%
+      sample_frac(0.5) # this sampling makes it hard
+  )
+  df_edges$Y_ego_hat = predict(ego_mod, newdata=df_edges, type='response')
+  nbr_mod = glm(
+    Y_nbr ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego + Y_ego_hat,
+    family='binomial',
+    data=df_edges %>%
+      filter(gt_nbr == 1) %>%
+      sample_frac(0.5)
+  )
+  df_edges$Y_nbr_hat = predict(nbr_mod, newdata=df_edges, type='response')
+  Y_hat_egoalter_hardmode = sum(
+    df_edges$outdeg_inv_ego *
+    df_edges$Y_ego_hat *
+    df_edges$Y_nbr_hat
+  )
+
   # with weights
   if (FALSE) {
     ego_wghts = glm(
@@ -191,7 +214,8 @@ fn_oos = function(fn_g) {
       Y_hat_node=Y_hat_node,
       Y_hat_edge=Y_hat_edge,
       Y_hat_egoalter=Y_hat_egoalter,
-      Y_hat_egoalter_passed=Y_hat_egoalter_passed
+      Y_hat_egoalter_passed=Y_hat_egoalter_passed,
+      Y_hat_egoalter_hardmode=Y_hat_egoalter_hardmode
     )
   )
 }
@@ -329,7 +353,6 @@ fn_dgp_main_edge = function() {
     
   return(g)
 }
-
 
 ######## Indep sims ###########################################################
 
@@ -942,7 +965,7 @@ fn_performance = function(fn_g) {
   
   # ego then alter
   ego_mod = glm(
-    Y_ego ~ X_ego + X_nbr + outdeg_inv_ego,
+    Y_ego ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego,
     family='binomial',
     data=df_edges %>%
       filter(gt_ego == 1)
@@ -952,7 +975,7 @@ fn_performance = function(fn_g) {
     newdata=df_edges,
     type='response',
   )
-  df_edges = df_edges %>%
+  df_edges_perf = df_edges %>%
     group_by(from) %>%
     summarize(
       gt_ego=mean(gt_ego),
@@ -960,10 +983,10 @@ fn_performance = function(fn_g) {
       Y_ego=mean(Y_ego)
     )
   egoalter_perf = fn_compute_performance_metrics(
-    df_edges %>%
+    df_edges_perf %>%
       filter(gt_ego == 0) %>%
       .$Y_ego,
-    df_edges %>%
+    df_edges_perf %>%
       filter(gt_ego == 0) %>%
       .$ego_preds
   ) %>%
@@ -971,11 +994,44 @@ fn_performance = function(fn_g) {
       model='egoalter'
     )
 
+  # hard mode egoalter perf: randomly remove some ground truth cases
+  ego_mod_hardmode = glm(
+    Y_ego ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego,
+    family='binomial',
+    data=df_edges %>%
+      filter(gt_ego == 1) %>%
+      sample_frac(0.5)
+  )
+  df_edges$ego_preds_hardmode = predict(
+    ego_mod_hardmode,
+    newdata=df_edges,
+    type='response',
+  )
+  df_edges_perf_hardmode = df_edges %>%
+    group_by(from) %>%
+    summarize(
+      gt_ego=mean(gt_ego),
+      ego_preds_hardmode=mean(ego_preds_hardmode),
+      Y_ego=mean(Y_ego)
+    )
+  egoalter_hardmode_perf = fn_compute_performance_metrics(
+    df_edges_perf_hardmode %>%
+      filter(gt_ego == 0) %>%
+      .$Y_ego,
+    df_edges_perf_hardmode %>%
+      filter(gt_ego == 0) %>%
+      .$ego_preds_hardmode
+  ) %>%
+    mutate(
+      model='egoalter_hardmode'
+    )
+
   return(
     bind_rows(
       node_perf,
       node_nonetwork_perf,
-      egoalter_perf
+      egoalter_perf,
+      egoalter_hardmode_perf
     )
   )
 }
