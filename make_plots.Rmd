@@ -107,6 +107,23 @@ df_unobs_edge = read_csv(
     sim='unobs',
     level='edge'
   )
+df_new_graph_node = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_node_runs.csv'
+) %>%
+  mutate(
+    sim='new_graph',
+    level='node'
+  )
+
+rmse = function(Y1, Y2) {
+  return(
+    sqrt(
+      mean(
+        (Y1 - Y2)^2
+      )
+    )
+  )
+}
 
 df_mae = bind_rows(
   df_main_node,
@@ -118,7 +135,8 @@ df_mae = bind_rows(
   df_degcorr_node,
   df_degcorr_edge,
   df_unobs_node,
-  df_unobs_edge
+  df_unobs_edge,
+  df_new_graph_node
 ) %>%
   mutate(
     Y_no_model=abs(Y_no_model - Y_true) / Y_true,
@@ -157,9 +175,10 @@ df_mae = bind_rows(
       sim == "degcorr" ~ "Degree",
       sim == "unobs" ~ "Unobserved",
       sim == "main" ~ "Main",
-      sim == "weirdsamp" ~ "Sampled"
+      sim == "weirdsamp" ~ "Sampled",
+      sim == "new_graph" ~ "New Graph"
     ),
-    sim=factor(sim, levels=c("Independent", "Degree", "Unobserved", "Main", "Sampled"))
+    sim=factor(sim, levels=c("Independent", "Degree", "Unobserved", "Main", "Sampled", "New Graph"))
   )
 
 df_bias = bind_rows(
@@ -172,7 +191,8 @@ df_bias = bind_rows(
   df_degcorr_node,
   df_degcorr_edge,
   df_unobs_node,
-  df_unobs_edge
+  df_unobs_edge,
+  df_new_graph_node
 ) %>%
   mutate(
     Y_no_model=(Y_no_model - Y_true) / Y_true,
@@ -211,9 +231,10 @@ df_bias = bind_rows(
       sim == "degcorr" ~ "Degree",
       sim == "unobs" ~ "Unobserved",
       sim == "main" ~ "Main",
-      sim == "weirdsamp" ~ "Sampled"
+      sim == "weirdsamp" ~ "Sampled",
+      sim == "new_graph" ~ "New Graph"
     ),
-    sim=factor(sim, levels=c("Independent", "Degree", "Unobserved", "Main", "Sampled"))
+    sim=factor(sim, levels=c("Independent", "Degree", "Unobserved", "Main", "Sampled", "New Graph"))
   )
 
 

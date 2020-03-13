@@ -1,5 +1,22 @@
 source("sim_code.R")
+
+N_SIMS = 100
+
+print('New graph node ')
+df_new_graph_node_runs = fn_par_bootstrap(
+  fn_oos,
+  N_SIMS,
+  fn_dgp_new_graph_node
+)
+write_csv(
+  df_new_graph_node_runs,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_node_runs.csv'
+)
+
+
 #### Run and save #############################################################
+
+if (FALSE) {
 
 # main
 print('Main node')
@@ -131,3 +148,4 @@ write_csv(
   df_sampling_edge_runs,
   '/Users/georgeberry/Dropbox/project-autocorr/data/sampling_edge_runs.csv'
 )
+}
