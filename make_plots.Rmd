@@ -15,8 +15,16 @@ knitr::opts_chunk$set(echo = TRUE)
 library(xtable)
 library(tidyverse)
 library(cowplot)
-palette <- c("#E69F00", "#56B4E9", "#009E73", "#D55E00", "#0072B2", "#CC79A7", "#999999", "#F0E442")
-
+palette = c(
+  "#E69F00",
+  "#56B4E9",
+  "#009E73",
+  "#D55E00",
+  "#0072B2",
+  "#CC79A7",
+  "#999999",
+  "#F0E442"
+)
 ```
 
 
@@ -107,12 +115,47 @@ df_unobs_edge = read_csv(
     sim='unobs',
     level='edge'
   )
-df_new_graph_node = read_csv(
-  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_node_runs.csv'
+df_new_graph_main_node = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_main_node_runs.csv'
 ) %>%
   mutate(
-    sim='new_graph',
+    sim='new_graph_main',
     level='node'
+  )
+df_new_graph_main_edge = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_main_edge_runs.csv'
+) %>%
+  mutate(
+    sim='new_graph_main',
+    level='edge'
+  )
+df_new_graph_equal_node = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_equal_node_runs.csv'
+) %>%
+  mutate(
+    sim='new_graph_equal',
+    level='node'
+  )
+df_new_graph_equal_edge = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_equal_edge_runs.csv'
+) %>%
+  mutate(
+    sim='new_graph_equal',
+    level='edge'
+  )
+df_new_graph_indep_node = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_indep_node_runs.csv'
+) %>%
+  mutate(
+    sim='new_graph_indep',
+    level='node'
+  )
+df_new_graph_indep_edge = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_indep_edge_runs.csv'
+) %>%
+  mutate(
+    sim='new_graph_indep',
+    level='edge'
   )
 
 rmse = function(Y1, Y2) {
@@ -136,7 +179,12 @@ df_mae = bind_rows(
   df_degcorr_edge,
   df_unobs_node,
   df_unobs_edge,
-  df_new_graph_node
+  df_new_graph_main_node,
+  df_new_graph_main_edge,
+  df_new_graph_equal_node,
+  df_new_graph_equal_edge,
+  df_new_graph_indep_node,
+  df_new_graph_indep_edge
 ) %>%
   mutate(
     Y_no_model=abs(Y_no_model - Y_true) / Y_true,
@@ -176,9 +224,11 @@ df_mae = bind_rows(
       sim == "unobs" ~ "Unobserved",
       sim == "main" ~ "Main",
       sim == "weirdsamp" ~ "Sampled",
-      sim == "new_graph" ~ "New Graph"
+      sim == "new_graph_main" ~ "New Graph",
+      sim == "new_graph_indep" ~ "New Graph (indep)",
+      sim == "new_graph_equal" ~ "New Graph (equal)",
     ),
-    sim=factor(sim, levels=c("Independent", "Degree", "Unobserved", "Main", "Sampled", "New Graph"))
+    sim=factor(sim, levels=c("Independent", "Degree", "Unobserved", "Main", "Sampled", "New Graph", "New Graph (indep)", "New Graph (equal)"))
   )
 
 df_bias = bind_rows(
@@ -192,7 +242,12 @@ df_bias = bind_rows(
   df_degcorr_edge,
   df_unobs_node,
   df_unobs_edge,
-  df_new_graph_node
+  df_new_graph_main_node,
+  df_new_graph_main_edge,
+  df_new_graph_equal_node,
+  df_new_graph_equal_edge,
+  df_new_graph_indep_node,
+  df_new_graph_indep_edge
 ) %>%
   mutate(
     Y_no_model=(Y_no_model - Y_true) / Y_true,
@@ -201,7 +256,7 @@ df_bias = bind_rows(
     Y_hat_edge=(Y_hat_edge - Y_true) / Y_true,
     Y_hat_egoalter=(Y_hat_egoalter - Y_true) / Y_true,
     Y_hat_egoalter_passed=(Y_hat_egoalter_passed - Y_true) / Y_true,
-    Y_hat_egoalter_hardmode=abs(Y_hat_egoalter_hardmode - Y_true) / Y_true,
+    Y_hat_egoalter_hardmode=(Y_hat_egoalter_hardmode - Y_true) / Y_true,
   ) %>%
   select(
     sim,
@@ -232,9 +287,11 @@ df_bias = bind_rows(
       sim == "unobs" ~ "Unobserved",
       sim == "main" ~ "Main",
       sim == "weirdsamp" ~ "Sampled",
-      sim == "new_graph" ~ "New Graph"
+      sim == "new_graph_main" ~ "New Graph",
+      sim == "new_graph_indep" ~ "New Graph (indep)",
+      sim == "new_graph_equal" ~ "New Graph (equal)",
     ),
-    sim=factor(sim, levels=c("Independent", "Degree", "Unobserved", "Main", "Sampled", "New Graph"))
+    sim=factor(sim, levels=c("Independent", "Degree", "Unobserved", "Main", "Sampled", "New Graph", "New Graph (indep)", "New Graph (equal)"))
   )
 
 
