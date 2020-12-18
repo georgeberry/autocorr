@@ -5,11 +5,12 @@ library(foreach)
 library(doParallel)
 library(pROC)
 library(caret)
+library(rlang)
 
 registerDoParallel(cores=12)
 N_SIMS = 100
 N_NODES = 4000
-N_GROUND_TRUTH_NODES = 500
+GROUND_TRUTH_LABELING_BUDGET = 500
 POWERLAW_EXPONENT = 0.8
 EDGES_PER_NEW_NODE = 5
 MAJORITY_GROUP_FRAC = 0.7
@@ -20,9 +21,26 @@ SAME_GRP_COEF = 0.7
 # is: fn_model_fitting(fn_sampling), and the fn_sampling knows how to 
 # gen the graph.
 
+
+#### Helpers ###################################################################
+
+# A simple helper to run stuff in parallel
+fn_par_run = function(fn, n_reps, ...) {
+  df_results = foreach(
+    i=1:n_reps,
+    .combine=rbind
+  ) %dopar% {
+    result = fn(...)
+    result$rep = i
+    return(result)
+  }
+  return(df_results)
+}
+
+
 #### Graph gen #################################################################
 
-play_undir_powerlaw_homophily_graph = function(
+play_bidir_powerlaw_homophily_graph = function(
     n_nodes,
     edges_per_node,
     majority_group_frac,
@@ -61,8 +79,8 @@ play_undir_powerlaw_homophily_graph = function(
     }
 
     # seed nodes are chose at random and completely connected (clique)
-    # edges_per_node is also the number of seeds
-    seeds = sample(nodes, edges_per_node, replace=FALSE)
+    # b/c of bidir we do 2 * edges_per_node + 1
+    seeds = sample(nodes, 2 * edges_per_node + 1, replace=FALSE)
 
     for (seed in seeds) {
         D[[seed]] = edges_per_node
@@ -70,6 +88,9 @@ play_undir_powerlaw_homophily_graph = function(
 
     edge_df = expand.grid(seeds, seeds)
     colnames(edge_df) = c('from', 'to')
+    # filter out self loops
+    edge_df = edge_df %>%
+      filter(from != to)
 
     node_iter_order = sample(
       setdiff(nodes, seeds),
@@ -86,14 +107,22 @@ play_undir_powerlaw_homophily_graph = function(
 
             # Using the conditional logit expression in Overgoor et al 2020
             deg_probs = exp(
-              powerlaw_exponent * log(unlist(D)) +
+              powerlaw_exponent * log(unlist(D) + 0.001) +
               same_grp_coef * same_grp_nodes
             )
             probs = deg_probs / sum(deg_probs)
 
-            draw = sample(nodes, 1, replace=FALSE, prob=probs)
-            while (draw == node) {
-                # if you sample yourself, redraw
+            draw = sample(
+              nodes,
+              1,
+              replace=FALSE,
+              prob=probs
+            )
+            #  no self-loops; no multi-edges
+            while (
+              (draw == node) | 
+              (nrow(edge_df %>% filter(from == node, to == draw)) >= 1)
+            ) {
                 draw = sample(nodes, 1, replace=FALSE, prob=probs)
             }
 
@@ -120,17 +149,9 @@ play_undir_powerlaw_homophily_graph = function(
 #### Samplers ##################################################################
 
 
-fn_new_dgp_main_node_randsamp = function() {
-  # Creates a graph and draws Y = f(X, Z), where X ~ N(0, 1) and
-  # Z is the ego-network avg of the observed X
-  g = play_undir_powerlaw_homophily_graph(
-    N_NODES,
-    EDGES_PER_NEW_NODE,
-    MAJORITY_GROUP_FRAC,
-    POWERLAW_EXPONENT,
-    SAME_GRP_COEF
-  )
-  g = g %>%
+fn_nodesamp = function(g) {
+  # Samples nodes uniformly at random
+  g = duplicate(g) %>%
     activate(nodes) %>%
     mutate(
       outdeg = centrality_degree(mode='out'),
@@ -138,7 +159,7 @@ fn_new_dgp_main_node_randsamp = function() {
       indeg = centrality_degree(mode='in'),
       indeg_inv = 1 / indeg,
       gt = sample(
-        c(rep(1, N_GROUND_TRUTH_NODES), rep(0, N_NODES - N_GROUND_TRUTH_NODES)),
+        c(rep(1, GROUND_TRUTH_LABELING_BUDGET), rep(0, N_NODES - GROUND_TRUTH_LABELING_BUDGET)),
         N_NODES,
         replace=FALSE
       )
@@ -166,17 +187,9 @@ fn_new_dgp_main_node_randsamp = function() {
 }
 
 
-fn_new_dgp_main_node_degsamp = function() {
-  # Creates a graph and draws Y = f(X, Z), where X ~ N(0, 1) and
-  # Z is the ego-network avg of the observed X
-  g = play_undir_powerlaw_homophily_graph(
-    N_NODES,
-    EDGES_PER_NEW_NODE,
-    MAJORITY_GROUP_FRAC,
-    POWERLAW_EXPONENT,
-    SAME_GRP_COEF
-  )
-  g = g %>%
+fn_degsamp = function(g) {
+  # Samples nodes proportional to d_i / sum(d_i)
+  g = duplicate(g) %>%
     activate(nodes) %>%
     mutate(
       outdeg = centrality_degree(mode='out'),
@@ -192,7 +205,7 @@ fn_new_dgp_main_node_degsamp = function() {
     mutate(pr = outdeg / sum(outdeg))
   gt_nodes = sample(
     tmp$name,
-    N_GROUND_TRUTH_NODES,
+    GROUND_TRUTH_LABELING_BUDGET,
     replace=FALSE,
     prob=tmp$pr
   )
@@ -224,22 +237,15 @@ fn_new_dgp_main_node_degsamp = function() {
 }
 
 
-fn_new_dgp_main_edge_randsamp = function() {
+fn_edgesamp = function(g) {
+  # Random edge sample given a labeling budget
   # The sampling here is tricky b/c we need to sample a random sample of edges
   # given a fixed node labeling budget
   # 
   # One way to do this would be to assign each edge a random number between 1
   # and E, and then set all edges to GT which are < the # which gives about
   # the right number of nodes
-
-  g = play_undir_powerlaw_homophily_graph(
-    N_NODES,
-    EDGES_PER_NEW_NODE,
-    MAJORITY_GROUP_FRAC,
-    POWERLAW_EXPONENT,
-    SAME_GRP_COEF
-  )
-  g = g %>%
+  g = duplicate(g) %>%
     activate(nodes) %>%
     mutate(
       outdeg = centrality_degree(mode='out'),
@@ -266,7 +272,7 @@ fn_new_dgp_main_edge_randsamp = function() {
       rand_num = sample(1:n(), n(), replace=FALSE),
     )
 
-  tmp = g %>%
+  numbered_edges = g %>%
     activate(edges) %>%
     as_tibble() %>%
     select(from, to, rand_num)
@@ -274,25 +280,39 @@ fn_new_dgp_main_edge_randsamp = function() {
   # literally just iterate through until the N of GT nodes is within 1 of
   # the desired
   rand_num_cutoff = NULL
-  for (i in 1:nrow(tmp)) {
-    tmp2 = tmp %>%
+  for (i in 1:nrow(numbered_edges)) {
+    tmp = numbered_edges %>%
       filter(rand_num <= i)
-    n_unique_nodes = length(unique(c(tmp2$from, tmp2$to)))
+    n_unique_nodes = length(unique(c(tmp$from, tmp$to)))
     if (
       # break first time we see this condition, should always be within 1 of
       # correct answer
-      n_unique_nodes >= N_GROUND_TRUTH_NODES
+      n_unique_nodes >= GROUND_TRUTH_LABELING_BUDGET
     ) {
       rand_num_cutoff = i
       break
     }
   }
-  gt_nodes = unique(c(tmp2$from, tmp2$to))
+  # since we have a bidir graph also need to include the j->i edges
+  # want just a vector of edge numbers
+  gt_edges = bind_rows(
+    numbered_edges %>%
+      filter(rand_num <= i),
+    numbered_edges %>%
+      filter(rand_num <= i) %>%
+      select(from=to, to=from) %>%
+      inner_join(
+        numbered_edges,
+        by=c('from', 'to')
+      )
+    )
+  gt_edges_num = unique(gt_edges$rand_num)
+  gt_nodes = unique(c(gt_edges$from, gt_edges$to))
 
   g = g %>%
     activate(edges) %>%
     mutate(
-      gt = ifelse(rand_num <= rand_num_cutoff, 1, 0)
+      gt = rand_num %in% gt_edges_num 
     ) %>%
     # for any node who is part of a gt edge, give that node gt=1
     activate(nodes) %>%
@@ -312,26 +332,9 @@ fn_new_dgp_main_edge_randsamp = function() {
   return(g)
 }
 
-
-
-#### Helpers ###################################################################
-
-# A simple helper to run stuff in parallel
-fn_par_run = function(fn, n_reps, ...) {
-  df_results = foreach(
-    i=1:n_reps,
-    .combine=rbind
-  ) %dopar% {
-    result = fn(...)
-    result$rep = i
-    return(result)
-  }
-  return(df_results)
-}
-
 #### Model fitting #############################################################
 
-fn_gen_graph_and_fit_models = function(fn_g) {
+fn_fit_models = function(g_with_samp) {
   # fit 7 models
   # node (no network features)
   # node (ctrl for ego_deg_inv)
@@ -341,7 +344,7 @@ fn_gen_graph_and_fit_models = function(fn_g) {
   # ego-alter (ctrl for X_ego, X_nbr, ego_deg_inv)
   # ego-alter (ctrl for X_ego, X_nbr, ego_deg_inv, nbr_deg_inv, d_ego, d_nbr)
 
-  g = fn_g()
+  g = g_with_samp
 
   #### True values in the network
   df_nodes = g %>% activate(nodes) %>% as_tibble()
@@ -501,6 +504,40 @@ fn_gen_graph_and_fit_models = function(fn_g) {
     )
   )
 }
+
+fn_run_sims = function() {
+  # each time we call this we generate 1 graph, then do 3 types of sampling on
+  # copies of the graph, then run models
+  g = play_bidir_powerlaw_homophily_graph(
+    N_NODES,
+    EDGES_PER_NEW_NODE,
+    MAJORITY_GROUP_FRAC,
+    POWERLAW_EXPONENT,
+    SAME_GRP_COEF
+  )
+
+  g_nodesamp = fn_nodesamp(g)
+  df_nodesamp = fn_fit_models(g_nodesamp)
+
+  g_degsamp = fn_degsamp(g)
+  df_degsamp = fn_fit_models(g_degsamp)
+
+  g_edgesamp = fn_edgesamp(g)
+  df_edgesamp = fn_fit_models(g_edgesamp)
+
+  return(
+    bind_rows(
+      df_nodesamp %>%
+        mutate(sampling='node'),
+      df_degsamp %>%
+        mutate(sampling='deg'),
+      df_edgesamp %>%
+        mutate(sampling='edge')
+    )
+  )
+
+}
+
 
 ######## Compute performance metrics ##########################################
 

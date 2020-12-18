@@ -4,44 +4,21 @@ N_SIMS = 100
 
 #### NEW GRAPH #################################################################
 
-print('New graph main node nodesamp')
-df_new_graph_main_node_runs = fn_par_run(
-  fn_oos,
-  N_SIMS,
-  fn_new_dgp_main_node
+df_new_runs = fn_par_run(
+  fn_run_sims,
+  N_SIMS
 )
 write_csv(
-  df_new_graph_main_node_runs,
-  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_main_node_runs.csv'
+  df_new_runs,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims.csv'
 )
 
-print('New graph main node degsamp')
-df_new_graph_main_node_runs = fn_par_run(
-  fn_oos,
-  N_SIMS,
-  fn_new_dgp_main_node
-)
-write_csv(
-  df_new_graph_main_node_runs,
-  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_main_node_runs.csv'
-)
-
-print('New graph main edge edgesamp')
-df_new_graph_main_edge_runs = fn_par_run(
-  fn_oos,
-  N_SIMS,
-  fn_new_dgp_main_edge
-)
-write_csv(
-  df_new_graph_main_edge_runs,
-  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_main_edge_runs.csv'
-)
 
 if (FALSE) {
 # indep
 print('New graph indep node')
 df_new_graph_indep_node_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_new_dgp_indep_node
 )
@@ -52,7 +29,7 @@ write_csv(
 
 print('New graph indep edge')
 df_new_graph_indep_edge_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_new_dgp_indep_edge
 )
@@ -64,7 +41,7 @@ write_csv(
 # equal
 print('New graph equal node')
 df_new_graph_equal_node_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_new_dgp_equal_node
 )
@@ -75,7 +52,7 @@ write_csv(
 
 print('New graph equal edge')
 df_new_graph_equal_edge_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_new_dgp_equal_edge
 )
@@ -111,7 +88,7 @@ write_csv(
 # main
 print('Main node')
 df_main_node_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_dgp_main_node
 )
@@ -121,7 +98,7 @@ write_csv(
   '/Users/georgeberry/Dropbox/project-autocorr/data/main_node_runs.csv'
 )
 df_main_edge_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_dgp_main_edge
 )
@@ -154,7 +131,7 @@ write_csv(
 # indep
 print('Indep node')
 df_indep_node_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_dgp_indep_node
 )
@@ -164,7 +141,7 @@ write_csv(
 )
 print('Indep edge')
 df_indep_edge_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_dgp_indep_edge
 )
@@ -176,7 +153,7 @@ write_csv(
 # degcorr
 print('Degcorr node')
 df_degcorr_node_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_dgp_degcorr_node
 )
@@ -186,7 +163,7 @@ write_csv(
 )
 print('Degcorr edge')
 df_degcorr_edge_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_dgp_degcorr_edge
 )
@@ -198,7 +175,7 @@ write_csv(
 # unobs
 print('Unobs node')
 df_unobs_node_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_dgp_unobs_node
 )
@@ -208,7 +185,7 @@ write_csv(
 )
 print('Unobs edge')
 df_unobs_edge_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_dgp_unobs_edge
 )
@@ -220,7 +197,7 @@ write_csv(
 # sampling
 print('Sampling node')
 df_sampling_node_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_dgp_sampling_node
 )
@@ -230,7 +207,7 @@ write_csv(
 )
 print('Sampling edge')
 df_sampling_edge_runs = fn_par_run(
-  fn_oos,
+  fn_gen_graph_and_fit_models,
   N_SIMS,
   fn_dgp_sampling_edge
 )
