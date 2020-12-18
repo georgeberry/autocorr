@@ -24,7 +24,104 @@ NOISE_COEF = 0.2
 ```
 
 
-```{r simulation_fn}
+# new graph
+
+```{r}
+play_undir_powerlaw_homophily_graph = function(
+    n_nodes,
+    edges_per_node,
+    majority_group_frac,
+    powerlaw_exponent,
+    same_grp_coef
+) {
+
+    majority_N = round(n_nodes * majority_group_frac)
+    majority_Y = rep(1, majority_N)
+    majority_Z = rnorm(majority_N, 0, 1)
+    majority_X = 1 + majority_Z
+
+    minority_N = round(n_nodes * (1 - majority_group_frac))
+    minority_Y = rep(0, minority_N)
+    minority_Z = rnorm(minority_N, 0, 1)
+    minority_X = -1 + minority_Z
+
+    # Group
+    Y = c(majority_Y, minority_Y)
+
+    X = c(majority_X, minority_X)
+
+    Z = c(majority_Z, minority_Z)
+
+    nodes = 1:n_nodes
+
+    node_df = data.frame(
+        Y=Y,
+        X=X
+    )
+
+    # Degree
+    D = list()
+    for (node in nodes) {
+        D[[node]] = 0
+    }
+
+    # seed nodes are chose at random and completely connected (clique)
+    # edges_per_node is also the number of seeds
+    seeds = sample(nodes, edges_per_node, replace=FALSE)
+
+    for (seed in seeds) {
+        D[[seed]] = edges_per_node
+    }
+
+    edge_df = expand.grid(seeds, seeds)
+    colnames(edge_df) = c('from', 'to')
+
+    node_iter_order = sample(
+      setdiff(nodes, seeds),
+      length(setdiff(nodes, seeds)),
+      replace=FALSE
+    )
+
+    for (node in node_iter_order) {
+        node_grp = Y[node]
+        same_grp_nodes = as.integer(Y == node_grp)
+        for (edge_to_add in 1:edges_per_node) {
+            # Determining a connection is a function of
+            # degree, group_Y, Z
+
+            # Using the conditional logit expression in Overgoor et al 2020
+            deg_probs = exp(
+              powerlaw_exponent * log(unlist(D)) +
+              same_grp_coef * same_grp_nodes
+            )
+            probs = deg_probs / sum(deg_probs)
+
+            draw = sample(nodes, 1, replace=FALSE, prob=probs)
+            while (draw == node) {
+                # if you sample yourself, redraw
+                draw = sample(nodes, 1, replace=FALSE, prob=probs)
+            }
+
+            edge_df = bind_rows(
+                edge_df,
+                data.frame(from=c(node, draw), to=c(draw, node))
+            )
+            D[[node]] = D[[node]] + 1
+            D[[draw]] = D[[draw]] + 1
+        }
+    }
+    return(
+        as_tbl_graph(edge_df)  %>%
+            activate(nodes) %>%
+            mutate(
+                Y=Y[as.integer(name)],
+                X=X[as.integer(name)],
+                Z=Z[as.integer(name)]
+            )
+    )
+}
+
+
 fn_new_dgp_main_node_degsamp = function() {
   # Creates a graph and draws Y = f(X, Z), where X ~ N(0, 1) and
   # Z is the ego-network avg of the observed X
@@ -33,8 +130,7 @@ fn_new_dgp_main_node_degsamp = function() {
     EDGES_PER_NEW_NODE,
     MAJORITY_GROUP_FRAC,
     POWERLAW_EXPONENT,
-    SAME_GRP_COEF,
-    NOISE_COEF
+    SAME_GRP_COEF
   )
   g = g %>%
     activate(nodes) %>%
@@ -82,29 +178,23 @@ fn_new_dgp_main_node_degsamp = function() {
     )
   return(g)
 }
-```
-
-```{r}
-fn_basic_model = function(df_nodes, df_edges) {
-  
-  
-  return(df_model)
-}
-```
 
 
 
-```{r}
 
 
 fn_test_reps = function(fn_g) {
   g = fn_g()
+  
+  # true vals
   df_nodes = g %>% activate(nodes) %>% as_tibble()
   df_edges = g %>% activate(edges) %>% as_tibble()
-  
   Y_true = sum(df_edges$outdeg_inv_ego * df_edges$Y)
-
-  ego_mod = lm(
+  
+  # mod 1
+  df_nodes = g %>% activate(nodes) %>% as_tibble()
+  df_edges = g %>% activate(edges) %>% as_tibble()
+  mod1 = glm(
     Y_ego ~ X_ego * outdeg_inv_ego +
       X_ego * outdeg_inv_nbr +
       X_nbr * outdeg_inv_ego +
@@ -112,497 +202,121 @@ fn_test_reps = function(fn_g) {
       outdeg_ego +
       outdeg_nbr,
     data=df_edges %>%
-      filter(gt_ego == 1)
+      filter(gt_ego == 1),
+    family=binomial()
   )
-  #ego_mod = lm(
-  #Y_ego ~ outdeg_inv_ego +
-  #  X_ego +
-  #  outdeg_inv_ego +
-  #  X_nbr +
-  #  outdeg_ego +
-  #  outdeg_nbr,
-  #data=df_edges %>%
-  #  filter(gt_ego == 1)
-  #)
-  df_edges$Y_ego_hat = predict(ego_mod, newdata=df_edges)
-  
+  df_edges$Y_ego_hat = predict(mod1, newdata=df_edges, type='response')
   df_edges %>%
     left_join(
       df_edges %>%
         select(from, to, Y_nbr_hat=Y_ego_hat),
       by=c('from'='to', 'to'='from')
-    ) -> df_edges
-  
-  
-  Y_hat_egoalter = sum(
+    ) ->
+    df_edges
+  Y_hat_mod1 = sum(
     df_edges$outdeg_inv_ego *
     df_edges$Y_ego_hat *
     df_edges$Y_nbr_hat
   )
-  
   df_edges$e_ego = df_edges$Y_ego - df_edges$Y_ego_hat
   df_edges$e_nbr = df_edges$Y_nbr - df_edges$Y_nbr_hat
+  b1_mod1=sum(df_edges$outdeg_inv_ego * df_edges$Y_ego_hat * df_edges$e_nbr)
+  b2_mod1=sum(df_edges$outdeg_inv_ego * df_edges$Y_nbr_hat * df_edges$e_ego)
+  e_mod1=sum(df_edges$outdeg_inv_ego * df_edges$e_ego * df_edges$e_nbr)
+  b1_raw_mod1=sum(df_edges$Y_ego_hat * df_edges$e_nbr)
+  b2_raw_mod1=sum(df_edges$Y_nbr_hat * df_edges$e_ego)
   
-  
-  # True values in the network
-  Y_true = sum(df_edges$outdeg_inv_ego * df_edges$Y)
-  
+  # mod 2
+  df_nodes = g %>% activate(nodes) %>% as_tibble()
+  df_edges = g %>% activate(edges) %>% as_tibble()
+  mod2 = glm(
+    Y_ego ~ X_ego +
+      X_nbr +
+      outdeg_inv_ego +
+      outdeg_inv_nbr +
+      outdeg_ego +
+      outdeg_nbr,
+    data=df_edges %>%
+      filter(gt_ego == 1),
+    family=binomial()
+  )
+  df_edges$Y_ego_hat = predict(mod2, newdata=df_edges, type='response')
   df_edges %>%
-    group_by(from) %>%
-    summarize(
-      e_ego_mean=mean(e_ego),
-      outdeg_ego=mean(outdeg_ego)
-    ) -> df_tmp
+    left_join(
+      df_edges %>%
+        select(from, to, Y_nbr_hat=Y_ego_hat),
+      by=c('from'='to', 'to'='from')
+    ) ->
+    df_edges
+  Y_hat_mod2 = sum(
+    df_edges$outdeg_inv_ego *
+    df_edges$Y_ego_hat *
+    df_edges$Y_nbr_hat
+  )
+  df_edges$e_ego = df_edges$Y_ego - df_edges$Y_ego_hat
+  df_edges$e_nbr = df_edges$Y_nbr - df_edges$Y_nbr_hat
+  b1_mod2=sum(df_edges$outdeg_inv_ego * df_edges$Y_ego_hat * df_edges$e_nbr)
+  b2_mod2=sum(df_edges$outdeg_inv_ego * df_edges$Y_nbr_hat * df_edges$e_ego)
+  e_mod2=sum(df_edges$outdeg_inv_ego * df_edges$e_ego * df_edges$e_nbr)
+  b1_raw_mod2=sum(df_edges$Y_ego_hat * df_edges$e_nbr)
+  b2_raw_mod2=sum(df_edges$Y_nbr_hat * df_edges$e_ego)
   
+
   return(
     data.frame( 
       Y_true=Y_true,
-      Y_hat_egoalter=Y_hat_egoalter,
-      b1_sum=sum(df_edges$outdeg_inv_ego * df_edges$Y_ego_hat * df_edges$e_nbr),
-      b2_sum=sum(df_edges$outdeg_inv_ego * df_edges$Y_nbr_hat * df_edges$e_ego),
-      e_sum=sum(df_edges$outdeg_inv_ego * df_edges$e_ego * df_edges$e_nbr),
-      b1_raw_sum=sum(df_edges$Y_ego_hat * df_edges$e_nbr),
-      b2_raw_sum=sum(df_edges$Y_nbr_hat * df_edges$e_ego)
+      
+      Y_hat_mod1=Y_hat_mod1,
+      b1_mod1=b1_mod1,
+      b2_mod1=b2_mod1,
+      e_mod1=e_mod1,
+      b1_raw_mod1=b1_raw_mod1,
+      b2_raw_mod1=b2_raw_mod1,
+      
+      Y_hat_mod2=Y_hat_mod2,
+      b1_mod2=b1_mod2,
+      b2_mod2=b2_mod2,
+      e_mod2=e_mod2,
+      b1_raw_mod2=b1_raw_mod2,
+      b2_raw_mod2=b2_raw_mod2
     )
   )
 }
 ```
 
 ```{r}
-tmp = fn_par_run(fn_test_reps, 30, fn_new_dgp_main_node_degsamp)
+fn_test_reps(fn_new_dgp_main_node_degsamp)
+```
+
+
+```{r}
+tmp = fn_par_run(fn_test_reps, 50, fn_new_dgp_main_node_degsamp)
 ```
 
 ```{r}
-mean(abs(tmp$Y_true - tmp$Y_hat_egoalter) / mean(tmp$Y_true))
+mean(tmp$Y_true - tmp$Y_hat_mod1)
 ```
 
 ```{r}
-mean(tmp$Y_true - tmp$Y_hat_egoalter) / mean(tmp$Y_true)
+tmp %>% summarize_all(mean) %>% View()
 ```
-
-```{r}
-tmp = fn_par_run(fn_test_reps, 30, fn_new_dgp_main_node_degsamp)
-```
-
-```{r}
-mean(abs(tmp$Y_true - tmp$Y_hat_egoalter) / mean(tmp$Y_true))
-```
-
-```{r}
-mean(tmp$Y_true - tmp$Y_hat_egoalter) / mean(tmp$Y_true)
-```
-
-
-
-
-### test edge corr
 
 
 ```{r}
 g = fn_new_dgp_main_node_degsamp()
 df_nodes = g %>% activate(nodes) %>% as_tibble()
 df_edges = g %>% activate(edges) %>% as_tibble()
-
-ego_mod = lm(
-  Y_ego ~ X_ego +
-    X_nbr +
-    outdeg_inv_ego +
-    outdeg_inv_nbr +
-    outdeg_ego + outdeg_nbr,
-  #family='binomial',
-  data=df_edges %>%
-    filter(gt_ego == 1)
-)
-df_edges$Y_ego_hat = predict(ego_mod, newdata=df_edges) # , type='response')
-
-df_edges %>%
-  left_join(
-    df_edges %>%
-      select(from, to, Y_nbr_hat=Y_ego_hat),
-    by=c('from'='to', 'to'='from')
-  ) -> df_edges
-
-
-Y_hat_egoalter = sum(
-  df_edges$outdeg_inv_ego *
-  df_edges$Y_ego_hat *
-  df_edges$Y_nbr_hat
-)
-
-df_edges$e_ego = df_edges$Y_ego - df_edges$Y_ego_hat
-df_edges$e_nbr = df_edges$Y_nbr - df_edges$Y_nbr_hat
-
-
-# True values in the network
-Y_true = sum(df_edges$outdeg_inv_ego * df_edges$Y)
-```
-
-
-
-
-
-
-```{r}
-g = fn_new_dgp_main_node_degsamp()
-```
-
-```{r}
-df_nodes = g %>% activate(nodes) %>% as_tibble()
-df_edges = g %>% activate(edges) %>% as_tibble()
-
-ego_mod = glm(
-  Y_ego ~ X_ego * outdeg_inv_ego +
-    X_ego * outdeg_inv_nbr +
-    X_nbr * outdeg_inv_ego +
-    X_nbr * outdeg_inv_nbr +
-    outdeg_ego + outdeg_nbr,
-  family='binomial',
-  data=df_edges %>%
-    filter(gt_ego == 1)
-)
-df_edges$Y_ego_hat = predict(ego_mod, newdata=df_edges, type='response')
-
-
-nbr_mod = glm(
-  Y_nbr ~ X_ego * outdeg_inv_ego +
-    X_ego * outdeg_inv_nbr +
-    X_nbr * outdeg_inv_ego +
-    X_nbr * outdeg_inv_nbr,
-  family='binomial',
-  data=df_edges %>%
-    filter(gt_nbr == 1)
-)
-df_edges$Y_nbr_hat = predict(nbr_mod, newdata=df_edges, type='response')
-
-
-Y_hat_egoalter = sum(
-  df_edges$outdeg_inv_ego *
-  df_edges$Y_ego_hat *
-  df_edges$Y_nbr_hat
-)
-
-df_edges$e_ego = df_edges$Y_ego - df_edges$Y_ego_hat
-df_edges$e_nbr = df_edges$Y_nbr - df_edges$Y_nbr_hat
-
-
-# True values in the network
-Y_true = sum(df_edges$outdeg_inv_ego * df_edges$Y)
-```
-
-```{r}
-print(Y_true)
-print(Y_hat_egoalter)
-```
-
-```{r}
-print(sum(df_edges$outdeg_inv_ego *df_edges$Y_ego * df_edges$e_nbr))
-print(sum(df_edges$outdeg_inv_ego *df_edges$Y_nbr * df_edges$e_ego))
-print(sum(df_edges$outdeg_inv_ego *df_edges$e_ego * df_edges$e_nbr))
-```
-
-```{r}
-df_edges %>%
-  left_join(
-    df_edges %>%
-      select(from, to, Y_nbr_hat2=Y_ego_hat),
-    by=c('from'='to', 'to'='from')
-  ) -> df_edges2
-
-df_edges2$e_nbr = df_edges2$Y_nbr - df_edges2$Y_nbr_hat2
-```
-
-```{r}
-Y_hat_egoalter2 = sum(
-  df_edges2$outdeg_inv_ego *
-  df_edges2$Y_ego_hat *
-  df_edges2$Y_nbr_hat2
-)
-print(Y_true)
-print(Y_hat_egoalter)
 ```
 
 
 ```{r}
-print(sum(df_edges2$outdeg_inv_ego * df_edges2$Y_ego_hat * df_edges2$e_nbr))
-print(sum(df_edges2$outdeg_inv_ego * df_edges2$Y_nbr_hat2 * df_edges2$e_ego))
-print(sum(df_edges2$outdeg_inv_ego * df_edges2$e_ego * df_edges2$e_nbr))
+g %>%
+  activate(nodes) %>%
+  as_tibble() %>%
+  mutate(outdeg=outdeg + 0.001 * rnorm(n())) %>%
+  ggplot(aes(x=log(rank(-outdeg)), y=log(outdeg))) +
+  geom_point()
 ```
-
-
-
-
-```{r}
-df_nodes = g %>% activate(nodes) %>% as_tibble()
-df_edges = g %>% activate(edges) %>% as_tibble()
-
-ego_mod = lm(
-  Y_ego ~ X_ego * outdeg_inv_ego +
-    X_ego * outdeg_inv_nbr +
-    X_nbr * outdeg_inv_ego +
-    X_nbr * outdeg_inv_nbr +
-    outdeg_ego + outdeg_nbr,
-  #family='binomial',
-  data=df_edges %>%
-    filter(gt_ego == 1)
-)
-df_edges$Y_ego_hat = predict(ego_mod, newdata=df_edges) # , type='response')
-
-df_edges %>%
-  left_join(
-    df_edges %>%
-      select(from, to, Y_nbr_hat=Y_ego_hat),
-    by=c('from'='to', 'to'='from')
-  ) -> df_edges
-
-
-Y_hat_egoalter = sum(
-  df_edges$outdeg_inv_ego *
-  df_edges$Y_ego_hat *
-  df_edges$Y_nbr_hat
-)
-
-df_edges$e_ego = df_edges$Y_ego - df_edges$Y_ego_hat
-df_edges$e_nbr = df_edges$Y_nbr - df_edges$Y_nbr_hat
-
-
-# True values in the network
-Y_true = sum(df_edges$outdeg_inv_ego * df_edges$Y)
-```
-
-```{r}
-print(Y_true)
-
-print(Y_hat_egoalter)
-```
-
-```{r}
-print(sum(df_edges$Y_ego_hat * df_edges$e_nbr))
-print(sum(df_edges$Y_nbr_hat * df_edges$e_ego))
-print(sum(df_edges$e_ego * df_edges$e_nbr))
-```
-
-```{r}
-print(sum(df_edges$outdeg_inv_ego * df_edges$Y_ego_hat * df_edges$e_nbr))
-print(sum(df_edges$outdeg_inv_ego * df_edges$Y_nbr_hat * df_edges$e_ego))
-print(sum(df_edges$outdeg_inv_ego * df_edges$e_ego * df_edges$e_nbr))
-```
-
-```{r}
-sum(df_edges$e_ego)
-```
-
-```{r}
-sum(df_edges$outdeg_inv_ego * df_edges$Y_ego_hat)
-```
-
-
-
-```{r}
-cov(df_edges$e_nbr, df_edges$outdeg_inv_ego * df_edges$Y_ego_hat)
-```
-
-```{r}
-sum(df_edges$outdeg_inv_ego * df_edges$e_nbr)
-```
-
-```{r}
-cov(df_edges$e_ego, df_edges$outdeg_ego)
-```
-
-```{r}
-cov(df_edges$e_ego, df_edges$indeg_ego)
-```
-
-```{r}
-df_edges %>%
-  group_by(from) %>%
-  summarize(
-    e_ego_mean=mean(e_ego),
-    outdeg_ego=mean(outdeg_ego)
-  ) -> df_tmp
-```
-
-```{r}
-cov(df_tmp$e_ego_mean, df_tmp$outdeg_ego)
-```
-
-```{r}
-plot(df_tmp$outdeg_ego, df_tmp$e_ego_mean)
-```
-
-
-```{r}
-mean(df_edges$e_ego)
-```
-
-
-
-
-```{r}
-fn_test_reps = function(fn_g) {
-  g = fn_g()
-  df_nodes = g %>% activate(nodes) %>% as_tibble()
-  df_edges = g %>% activate(edges) %>% as_tibble()
-  
-  Y_true = sum(df_edges$outdeg_inv_ego * df_edges$Y)
-
-  ego_mod = lm(
-  Y_ego ~ outdeg_inv_ego + X_ego  +
-    outdeg_inv_ego + X_nbr +
-    #outdeg_inv_nbr * X_ego +
-    #outdeg_inv_nbr * X_nbr +
-    outdeg_ego + outdeg_nbr,
-  #family='binomial',
-  data=df_edges %>%
-    filter(gt_ego == 1)
-  )
-  df_edges$Y_ego_hat = predict(ego_mod, newdata=df_edges) # , type='response')
-  
-  df_edges %>%
-    left_join(
-      df_edges %>%
-        select(from, to, Y_nbr_hat=Y_ego_hat),
-      by=c('from'='to', 'to'='from')
-    ) -> df_edges
-  
-  
-  Y_hat_egoalter = sum(
-    df_edges$outdeg_inv_ego *
-    df_edges$Y_ego_hat *
-    df_edges$Y_nbr_hat
-  )
-  
-  df_edges$e_ego = df_edges$Y_ego - df_edges$Y_ego_hat
-  df_edges$e_nbr = df_edges$Y_nbr - df_edges$Y_nbr_hat
-  
-  
-  # True values in the network
-  Y_true = sum(df_edges$outdeg_inv_ego * df_edges$Y)
-  
-  df_edges %>%
-    group_by(from) %>%
-    summarize(
-      e_ego_mean=mean(e_ego),
-      outdeg_ego=mean(outdeg_ego)
-    ) -> df_tmp
-  
-  return(
-    data.frame( 
-      Y_true=Y_true,
-      Y_hat_egoalter=Y_hat_egoalter,
-      cov_term1=cov(df_edges$outdeg_inv_ego * df_edges$Y_ego_hat, df_edges$e_nbr),
-      cov_term2=cov(df_edges$outdeg_inv_ego * df_edges$Y_nbr_hat, df_edges$e_ego),
-      e_mean=mean(df_edges$e_ego)
-    )
-  )
-}
-```
-
-
-```{r}
-fn_test_reps(fn_dgp_main_node)
-```
-
-
-```{r}
-tmp3 = fn_par_run(fn_test_reps, 50, fn_dgp_main_node)
-```
-
-```{r}
-mean(abs(tmp$Y_true - tmp$Y_hat_egoalter)) / mean(tmp$Y_hat_egoalter)
-```
-
-```{r}
-mean(abs(tmp2$Y_true - tmp2$Y_hat_egoalter)) / mean(tmp2$Y_hat_egoalter)
-```
-
-```{r}
-mean(abs(tmp3$Y_true - tmp3$Y_hat_egoalter)) / mean(tmp3$Y_hat_egoalter)
-```
-
-
-
-
-```{r}
-  g = fn_dgp_main_node()
-  df_nodes = g %>% activate(nodes) %>% as_tibble()
-  df_edges = g %>% activate(edges) %>% as_tibble()
-  
-  Y_true = sum(df_edges$outdeg_inv_ego * df_edges$Y)
-
-  ego_mod = lm(
-  Y_ego ~ outdeg_inv_ego + X_ego  +
-    outdeg_inv_ego + X_nbr +
-    outdeg_inv_nbr * X_ego +
-    outdeg_inv_nbr * X_nbr +
-    outdeg_ego + outdeg_nbr,
-  #family='binomial',
-  data=df_edges %>%
-    filter(gt_ego == 1)
-  )
-  df_edges$Y_ego_hat = predict(ego_mod, newdata=df_edges)
-  
-  df_edges %>%
-    left_join(
-      df_edges %>%
-        select(from, to, Y_nbr_hat=Y_ego_hat),
-      by=c('from'='to', 'to'='from')
-    ) -> df_edges
-  
-  
-  Y_hat_egoalter = sum(
-    df_edges$outdeg_inv_ego *
-    df_edges$Y_ego_hat *
-    df_edges$Y_nbr_hat
-  )
-  
-  df_edges$e_ego = df_edges$Y_ego - df_edges$Y_ego_hat
-  df_edges$e_nbr = df_edges$Y_nbr - df_edges$Y_nbr_hat
-  
-  
-  # True values in the network
-  Y_true = sum(df_edges$outdeg_inv_ego * df_edges$Y)
-  
-  df_edges %>%
-    group_by(from) %>%
-    summarize(
-      e_ego_mean=mean(e_ego),
-      outdeg_ego=mean(outdeg_ego)
-    ) -> df_tmp
-```
-
-```{r}
-summary(lm(
-   Y_ego ~ outdeg_inv_ego + X_ego  +
-    outdeg_inv_ego + X_nbr +
-    #outdeg_inv_nbr * X_ego +
-    #outdeg_inv_nbr * X_nbr +
-    outdeg_ego + outdeg_nbr + Y_nbr_hat,
-  data=df_edges
-))
-```
-
-
-
-
-### Check out sampling proportional to degree
-
-```{r}
-g = fn_new_dgp_main_edge()
-df_nodes = g %>% activate(nodes) %>% as_tibble()
-df_edges = g %>% activate(edges) %>% as_tibble()
-```
-
-```{r}
-df_nodes %>%
-  mutate(deg=outdeg/sum(outdeg)) %>%
-  group_by(deg) %>%
-  summarize(n=n(), mu=mean(gt)) %>%
-  arrange(-deg) %>%
-  ggplot() +
-  geom_point(aes(x=deg, y=mu))
-```
-
 
 
 ### Testing implications of sampling proportional to node degree
@@ -625,230 +339,3 @@ df_edges %>%
   ) %>%
   summarize(mean(idx))
 ```
-
-```{r}
-df_edges %>%
-  mutate(
-    idx=1:n()
-  ) %>%
-  sample_n(10000, replace=FALSE) %>%
-  summarize(mean(idx))
-```
-
-
-
-
-
-```{r}
-
-fn_new_dgp_main_node_degsamp = function() {
-  # Creates a graph and draws Y = f(X, Z), where X ~ N(0, 1) and
-  # Z is the ego-network avg of the observed X
-  g = play_undir_powerlaw_homophily_graph(
-    N_NODES,
-    EDGES_PER_NEW_NODE,
-    MAJORITY_GROUP_FRAC,
-    POWERLAW_EXPONENT,
-    SAME_GRP_COEF,
-    NOISE_COEF
-  )
-  g = g %>%
-    activate(nodes) %>%
-    mutate(
-      outdeg = centrality_degree(mode='out'),
-      outdeg_inv = 1 / outdeg,
-      indeg = centrality_degree(mode='in'),
-      indeg_inv = 1 / indeg,
-    )
-
-  tmp = g %>%
-    activate(nodes) %>%
-    as_tibble() %>%
-    select(name, outdeg) %>%
-    mutate(pr = outdeg / sum(outdeg))
-  gt_nodes = sample(
-    tmp$name,
-    N_GROUND_TRUTH_NODES,
-    replace=FALSE,
-    prob=tmp$pr
-  )
-    
-  g = g %>%
-    mutate(
-      gt = as.integer(name %in% gt_nodes)
-    ) %>%
-    activate(edges) %>%
-    mutate(
-      Y_ego = .N()$Y[from],
-      Y_nbr = .N()$Y[to],
-      Y = Y_ego * Y_nbr,
-      indeg_ego = .N()$indeg[from],
-      indeg_nbr = .N()$indeg[to],
-      outdeg_ego = .N()$outdeg[from],
-      outdeg_nbr = .N()$outdeg[to],
-      indeg_inv_ego = .N()$indeg_inv[from],
-      indeg_inv_nbr = .N()$indeg_inv[to],
-      outdeg_inv_ego = .N()$outdeg_inv[from],
-      outdeg_inv_nbr = .N()$outdeg_inv[to],
-      gt_ego = .N()$gt[from],
-      gt_nbr = .N()$gt[to],
-      gt = as.numeric(gt_ego & gt_nbr),
-      X_ego = .N()$X[from],
-      X_nbr = .N()$X[to],
-    )
-  return(g)
-}
-
-```
-
-
-```{r}
-g = fn_new_dgp_main_node_degsamp()
-```
-
-```{r}
-df_nodes = g %>% activate(nodes) %>% as_tibble()
-df_edges = g %>% activate(edges) %>% as_tibble()
-```
-
-```{r}
-df_nodes %>% group_by(outdeg) %>% summarize(mu=mean(gt), n()) %>% arrange(-mu) %>% View()
-```
-
-```{r}
-df_nodes %>%
-  mutate(pr=outdeg/sum(outdeg)) %>%
-  select(outdeg, pr) %>% arrange(outdeg)
-```
-
-
-
-```{r}
-
-  g = play_undir_powerlaw_homophily_graph(
-    N_NODES,
-    EDGES_PER_NEW_NODE,
-    MAJORITY_GROUP_FRAC,
-    POWERLAW_EXPONENT,
-    SAME_GRP_COEF,
-    NOISE_COEF
-  )
-  g = g %>%
-    activate(nodes) %>%
-    mutate(
-      outdeg = centrality_degree(mode='out'),
-      outdeg_inv = 1 / outdeg,
-      indeg = centrality_degree(mode='in'),
-      indeg_inv = 1 / indeg,
-    ) %>%
-    activate(edges) %>%
-    mutate(
-      Y_ego = .N()$Y[from],
-      Y_nbr = .N()$Y[to],
-      Y = Y_ego * Y_nbr,
-      indeg_ego = .N()$indeg[from],
-      indeg_nbr = .N()$indeg[to],
-      outdeg_ego = .N()$outdeg[from],
-      outdeg_nbr = .N()$outdeg[to],
-      indeg_inv_ego = .N()$indeg_inv[from],
-      indeg_inv_nbr = .N()$indeg_inv[to],
-      outdeg_inv_ego = .N()$outdeg_inv[from],
-      outdeg_inv_nbr = .N()$outdeg_inv[to],
-      # sample at edge level
-      X_ego = .N()$X[from],
-      X_nbr = .N()$X[to],
-      rand_num = sample(1:n(), n(), replace=FALSE),
-    )
-
-  tmp = g %>%
-    activate(edges) %>%
-    as_tibble() %>%
-    select(from, to, rand_num)
-
-  # literally just iterate through until the N of GT nodes is within 1 of
-  # the desired
-  rand_num_cutoff = NULL
-  for (i in 1:nrow(tmp)) {
-    tmp2 = tmp %>%
-      filter(rand_num <= i)
-    n_unique_nodes = length(unique(c(tmp2$from, tmp2$to)))
-    if (
-      # break first time we see this condition, should always be within 1 of
-      # correct answer
-      n_unique_nodes >= N_GROUND_TRUTH_NODES
-    ) {
-      rand_num_cutoff = i
-      break
-    }
-  }
-  gt_nodes = unique(c(tmp2$from, tmp2$to))
-
-  g = g %>%
-    activate(edges) %>%
-    mutate(
-      gt = ifelse(rand_num <= rand_num_cutoff, 1, 0)
-    ) %>%
-    # for any node who is part of a gt edge, give that node gt=1
-    activate(nodes) %>%
-    mutate(
-      # if any edge containing the focal node is 1, the node is gt=1
-      gt=as.integer(name %in% gt_nodes)
-    ) %>%
-    # now go back and label the gt_ego/gt_nbr based on the node being included
-    # in any ground-truth edge
-    activate(edges) %>%
-    mutate(
-      gt_ego = .N()$gt[from],
-      gt_nbr = .N()$gt[to],
-    )
-```
-
-```{r}
-tmp3 = g %>% activate(nodes) %>% as_tibble()
-```
-
-
-### 
-
-```{r}
-    
-
-    majority_N = round(4000 * 0.7)
-    majority_Y = rep(1, majority_N)
-    majority_Z = rnorm(majority_N, 0, 1)
-    majority_X = 1 + majority_Z
-
-    minority_N = round(4000 * (1 - 0.7))
-    minority_Y = rep(0, minority_N)
-    minority_Z = rnorm(minority_N, 0, 1)
-    minority_X = -1 + minority_Z
-    
-    Y = c(majority_Y, minority_Y)
-
-    X = c(majority_X, minority_X)
-
-    Z = c(majority_Z, minority_Z)
-
-    #nodes = 1:n_nodes
-
-    node_df = data.frame(
-        Y=Y,
-        X=X
-    )
-```
-
-```{r}
-summary(glm(Y ~ X, family=binomial()))
-```
-
-```{r}
-as.numeric(auc(roc(
-  Y,
-  predict(glm(Y ~ X, family=binomial()), type='response')
-)))
-```
-
-```{r}
-mean((predict(glm(Y ~ X, family=binomial()), type='response') > 0.5) == Y)
-```
-

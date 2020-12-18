@@ -2,16 +2,9 @@ source("sim_code.R")
 
 N_SIMS = 100
 
-
-# Naive bootstrap raw values
-
-
-
-
 #### NEW GRAPH #################################################################
 
-# main
-print('New graph main node')
+print('New graph main node nodesamp')
 df_new_graph_main_node_runs = fn_par_run(
   fn_oos,
   N_SIMS,
@@ -22,7 +15,18 @@ write_csv(
   '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_main_node_runs.csv'
 )
 
-print('New graph main edge')
+print('New graph main node degsamp')
+df_new_graph_main_node_runs = fn_par_run(
+  fn_oos,
+  N_SIMS,
+  fn_new_dgp_main_node
+)
+write_csv(
+  df_new_graph_main_node_runs,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_main_node_runs.csv'
+)
+
+print('New graph main edge edgesamp')
 df_new_graph_main_edge_runs = fn_par_run(
   fn_oos,
   N_SIMS,
@@ -33,6 +37,7 @@ write_csv(
   '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_main_edge_runs.csv'
 )
 
+if (FALSE) {
 # indep
 print('New graph indep node')
 df_new_graph_indep_node_runs = fn_par_run(
@@ -309,4 +314,5 @@ df_boot %>%
   summarize(
     mean(in_range)
   )
+}
 }
