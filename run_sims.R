@@ -1,17 +1,82 @@
 source("sim_code.R")
 
-N_SIMS = 100
+registerDoParallel(cores=12)
+N_SIMS = 2
+N_NODES = 4000
+GROUND_TRUTH_LABELING_BUDGET = 500
+ALPHA = 0.8  # powerlaw exponent
+BETA = 0.7  # strength of homophily
+EDGES_PER_NEW_NODE = 5
+MAJORITY_GROUP_FRAC = 0.7
 
 #### NEW GRAPH #################################################################
 
-df_new_runs = fn_par_run(
+df_new_runs_no_homophily = fn_par_run(
   fn_run_sims,
-  N_SIMS
+  N_SIMS,
+
+  # sim params
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  ALPHA,
+  0.0
 )
 write_csv(
-  df_new_runs,
-  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims.csv'
+  df_new_runs_no_homophily,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_no_homophily.csv'
 )
+
+df_new_runs_low_homophily = fn_par_run(
+  fn_run_sims,
+  N_SIMS,
+
+  # sim params
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  ALPHA,
+  0.4
+)
+write_csv(
+  df_new_runs_low_homophily,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_low_homophily.csv'
+)
+
+df_new_runs_main = fn_par_run(
+  fn_run_sims,
+  N_SIMS,
+
+  # sim params
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  ALPHA,
+  BETA
+)
+write_csv(
+  df_new_runs_main,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_main.csv'
+)
+
+
+df_new_runs_high_homophily = fn_par_run(
+  fn_run_sims,
+  N_SIMS,
+
+  # sim params
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  ALPHA,
+  1.2
+)
+write_csv(
+  df_new_runs_high_homophily,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_high_homophily.csv'
+)
+
+
 
 
 if (FALSE) {

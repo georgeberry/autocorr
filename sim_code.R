@@ -7,15 +7,6 @@ library(pROC)
 library(caret)
 library(rlang)
 
-registerDoParallel(cores=12)
-N_SIMS = 100
-N_NODES = 4000
-GROUND_TRUTH_LABELING_BUDGET = 500
-POWERLAW_EXPONENT = 0.8
-EDGES_PER_NEW_NODE = 5
-MAJORITY_GROUP_FRAC = 0.7
-SAME_GRP_COEF = 0.7
-
 # The basic idea is that there's a graph gen function, a function which does 
 # the sampling, and then a function which fits the models. The basic structure
 # is: fn_model_fitting(fn_sampling), and the fn_sampling knows how to 
@@ -44,8 +35,8 @@ play_bidir_powerlaw_homophily_graph = function(
     n_nodes,
     edges_per_node,
     majority_group_frac,
-    powerlaw_exponent,
-    same_grp_coef
+    alpha,
+    beta
 ) {
 
     majority_N = round(n_nodes * majority_group_frac)
@@ -107,8 +98,8 @@ play_bidir_powerlaw_homophily_graph = function(
 
             # Using the conditional logit expression in Overgoor et al 2020
             deg_probs = exp(
-              powerlaw_exponent * log(unlist(D) + 0.001) +
-              same_grp_coef * same_grp_nodes
+              alpha * log(unlist(D) + 0.001) +
+              beta * same_grp_nodes
             )
             probs = deg_probs / sum(deg_probs)
 
@@ -402,6 +393,20 @@ fn_fit_models = function(g_with_samp) {
     node_preds[df_edges$from] *
     node_preds[df_edges$to]
   )
+
+  #### Predict edge categories directly (no network features)
+  df_nodes = g %>% activate(nodes) %>% as_tibble()
+  df_edges = g %>% activate(edges) %>% as_tibble()
+  edge_mod = glm(
+    Y ~ X_ego + X_nbr,
+    family='binomial',
+    data=df_edges %>%
+      filter(gt == 1)
+  )
+  Y_hat_edge_nonetwork = sum(
+    df_edges$outdeg_inv_ego *
+    predict(edge_mod, newdata=df_edges, type='response')
+  )
   
   #### Predict edge categories directly (basic features)
   df_nodes = g %>% activate(nodes) %>% as_tibble()
@@ -487,6 +492,15 @@ fn_fit_models = function(g_with_samp) {
     df_edges$Y_nbr_hat
   )
 
+  tmp = df_edges %>%
+    filter(Y_ego == 1) %>%
+    group_by(Y_ego, Y_nbr) %>%
+    tally()
+  ingroup_links = tmp %>% filter(Y_ego == 1, Y_nbr == 1) %>% pull(n)
+  crossgroup_links = tmp %>% filter(Y_ego == 1, Y_nbr == 0) %>% pull(n)
+  actual = ingroup_links / (ingroup_links + crossgroup_links)
+  majority_group_homophily = (actual - MAJORITY_GROUP_FRAC) / (1 - MAJORITY_GROUP_FRAC)
+
   return(
     data.frame( 
       Y_true=Y_true,
@@ -496,24 +510,33 @@ fn_fit_models = function(g_with_samp) {
       Y_hat_node_basic=Y_hat_node_basic,
       Y_hat_node_full=Y_hat_node_full,
 
+      Y_hat_edge_nonetwork=Y_hat_edge_nonetwork,
       Y_hat_edge_basic=Y_hat_edge_basic,
       Y_hat_edge_full=Y_hat_edge_full,
 
       Y_hat_egoalter_basic=Y_hat_egoalter_basic,
-      Y_hat_egoalter_full=Y_hat_egoalter_full
+      Y_hat_egoalter_full=Y_hat_egoalter_full,
+
+      majority_group_homophily=majority_group_homophily
     )
   )
 }
 
-fn_run_sims = function() {
+fn_run_sims = function(
+  n_nodes,
+  edges_per_new_node,
+  majority_group_frac,
+  alpha,
+  beta
+) {
   # each time we call this we generate 1 graph, then do 3 types of sampling on
   # copies of the graph, then run models
   g = play_bidir_powerlaw_homophily_graph(
-    N_NODES,
-    EDGES_PER_NEW_NODE,
-    MAJORITY_GROUP_FRAC,
-    POWERLAW_EXPONENT,
-    SAME_GRP_COEF
+    n_nodes,
+    edges_per_new_node,
+    majority_group_frac,
+    alpha,
+    beta
   )
 
   g_nodesamp = fn_nodesamp(g)

@@ -34,18 +34,6 @@ df_sim = read_csv(
 )
 ```
 
-```{r, functions}
-fn_rmse = function(Y1, Y2) {
-  return(
-    sqrt(
-      mean(
-        (Y1 - Y2)^2
-      )
-    )
-  )
-}
-```
-
 ```{r, make_data}
 df = df_sim %>%
   pivot_longer(
@@ -90,15 +78,7 @@ df %>%
   facet_wrap(~sampling) + 
   theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
 ```
-  
-```{r}
-df %>%
-  
-  ggplot(aes(x=model, y=mae)) +
-  geom_boxplot() +
-  facet_wrap(~sampling) + 
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
-```
+
 
 ```{r}
 df %>%

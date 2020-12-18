@@ -12,15 +12,14 @@ library(pROC)
 library(caret)
 source("/Users/georgeberry/Dropbox/project-autocorr/autocorr/sim_code.R")
 
-registerDoParallel(cores=10)
+registerDoParallel(cores=12)
 N_SIMS = 100
 N_NODES = 4000
-N_GROUND_TRUTH_NODES = 500
-POWERLAW_EXPONENT = 0.8
+GROUND_TRUTH_LABELING_BUDGET = 500
+ALPHA = 0.8  # powerlaw exponent
+BETA = 0.7  # strength of homophily
 EDGES_PER_NEW_NODE = 5
 MAJORITY_GROUP_FRAC = 0.7
-SAME_GRP_COEF = 0.7
-NOISE_COEF = 0.2
 ```
 
 
@@ -29,7 +28,14 @@ NOISE_COEF = 0.2
 check edgesamp
 
 ```{r}
-g = fn_new_dgp_main_edgesamp()
+g = play_bidir_powerlaw_homophily_graph(
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  0.8,
+  1.2
+)
+g = fn_degsamp(g)
 df_nodes = g %>% activate(nodes) %>% as_tibble()
 df_edges = g %>% activate(edges) %>% as_tibble()
 ```
@@ -39,7 +45,6 @@ df_edges %>% group_by(from, to) %>% tally() %>% arrange(-n)
 ```
 ```{r}
 df_edges %>% filter(from == to)
-
 ```
 
 
@@ -76,12 +81,6 @@ mean(tmp$Y_true - tmp$Y_hat_mod1)
 tmp %>% summarize_all(mean) %>% View()
 ```
 
-
-```{r}
-g = fn_new_dgp_main_node_degsamp()
-df_nodes = g %>% activate(nodes) %>% as_tibble()
-df_edges = g %>% activate(edges) %>% as_tibble()
-```
 
 
 ```{r}
