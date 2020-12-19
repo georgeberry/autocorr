@@ -30,14 +30,14 @@ palette = c(
 
 ```{r, data}
 df_sim = read_csv(
-  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims.csv'
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_main.csv'
 )
 ```
 
 ```{r, make_data}
 df = df_sim %>%
   pivot_longer(
-    cols=Y_no_model:Y_hat_egoalter_full,
+    cols=Y_no_model:Y_hat_egoalter_full_log,
     names_to='model',
     values_to='model_val'
   ) %>%
@@ -48,185 +48,116 @@ df = df_sim %>%
       model == 'Y_no_model' ~ 'No model',
       model == "Y_hat_node_nonetwork" ~ "Node\n(no network)",
       model == "Y_hat_node_basic" ~ "Node",
-      model == "Y_hat_node_full" ~ "Node (more controls)",
+      model == "Y_hat_node_full" ~ "Node\n(more controls)",
+      model == "Y_hat_edge_nonetwork" ~ "Edge\n(no network)",
       model == "Y_hat_edge_basic" ~ "Edge",
-      model == "Y_hat_edge_full" ~ "Edge (more controls)",
+      model == "Y_hat_edge_full" ~ "Edge\n(more controls)",
       model == "Y_hat_egoalter_basic" ~ "Ego-alter",
-      model == "Y_hat_egoalter_full" ~ "Ego-alter (more controls)",
+      model == "Y_hat_egoalter_full" ~ "Ego-alter\n(more controls)",
+      model == "Y_hat_egoalter_full_log" ~ "Ego-alter\n(alternate)"
     ),
     model=factor(
       model,
       levels=c(
         'No model',
+        "Edge\n(no network)",
         "Edge",
-        "Edge (more controls)",
+        "Edge\n(more controls)",
         "Node\n(no network)",
         "Node",
-        "Node (more controls)",
+        "Node\n(more controls)",
         "Ego-alter",
-        "Ego-alter (more controls)"
+        "Ego-alter\n(more controls)",
+        "Ego-alter\n(alternate)"
       )
+    ),
+    sampling=case_when(
+      sampling == 'deg' ~ 'Prop. to degree sampling',
+      sampling == 'edge' ~ 'Edge sampling',
+      sampling == 'node' ~ 'Node sampling',
     )
   )
 ```
 
 ```{r}
 df %>%
-  
+  filter(!(model %in% c(
+    'No model',
+    "Edge\n(no network)",
+    "Edge\n(more controls)",
+    "Node\n(more controls)",
+    "Ego-alter\n(more controls)"
+  ))) %>% 
   ggplot(aes(x=model, y=mae)) +
   geom_boxplot() +
   facet_wrap(~sampling) + 
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+  theme_cowplot() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
+```{r}
+df %>%
+  filter(!(model %in% c(
+    'No model',
+    "Edge\n(no network)",
+    "Edge\n(more controls)",
+    "Node\n(more controls)",
+    "Ego-alter\n(more controls)"
+  ))) %>% 
+  group_by(model, sampling) %>%
+  summarize(std=sd(mae) / sqrt(n()), mae=mean(mae)) %>%
+  mutate(lcl = mae - 1.96 * std, ucl = mae + 1.96 * std) %>%
+  ggplot(aes(x=model, y=mae)) +
+  geom_point(aes(color=sampling), position=position_dodge(width=0.3)) +
+  geom_errorbar(aes(ymin=lcl, ymax=ucl, color=sampling), width=0.2, position=position_dodge(width=0.3)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  theme_cowplot() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
+```{r}
+df %>%
+  filter(!(model %in% c(
+    'No model',
+    "Edge\n(no network)",
+    "Edge\n(more controls)",
+    "Node\n(more controls)",
+    "Ego-alter\n(more controls)"
+  ))) %>% 
+  group_by(model, sampling) %>%
+  summarize(std=sd(bias) / sqrt(n()), bias=mean(bias)) %>%
+  mutate(lcl = bias - 1.96 * std, ucl = bias + 1.96 * std) %>%
+  ggplot(aes(x=model, y=bias)) +
+  geom_point(aes(color=sampling), position=position_dodge(width=0.3)) +
+  geom_errorbar(aes(ymin=lcl, ymax=ucl, color=sampling), width=0.2, position=position_dodge(width=0.3)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  theme_cowplot() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
 ```
 
 
 ```{r}
 df %>%
+  filter(!(model %in% c(
+    'No model',
+    "Edge\n(no network)",
+    "Edge\n(more controls)",
+    "Node\n(more controls)",
+    "Ego-alter\n(more controls)"
+  ))) %>% 
   ggplot(aes(x=model, y=bias)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
   geom_boxplot() +
   facet_wrap(~sampling) + 
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+  theme_cowplot() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
 ```
 
-  
-  
-```{r}  
-  mutate(
-    
-    
-    Y_no_model=abs(Y_no_model - Y_true) / Y_true,
-    Y_hat_node=abs(Y_hat_node - Y_true) / Y_true,
-    Y_hat_node_nonetwork=abs(Y_hat_node_nonetwork - Y_true) / Y_true,
-    Y_hat_edge=abs(Y_hat_edge - Y_true) / Y_true,
-    Y_hat_egoalter=abs(Y_hat_egoalter - Y_true) / Y_true,
-    Y_hat_egoalter_passed=abs(Y_hat_egoalter_passed - Y_true) / Y_true,
-    Y_hat_egoalter_hardmode=abs(Y_hat_egoalter_hardmode - Y_true) / Y_true,
-  ) %>%
-  select(
-    sim,
-    level,
-    Y_no_model,
-    Y_hat_node,
-    Y_hat_node_nonetwork,
-    Y_hat_edge,
-    Y_hat_egoalter,
-    Y_hat_egoalter_passed,
-    Y_hat_egoalter_hardmode
-  ) %>%
-  pivot_longer(Y_no_model:Y_hat_egoalter_hardmode, names_to='model', values_to='val') %>%
-  mutate(
-    model=case_when(
-      model == 'Y_no_model' ~ 'No model',
-      model == "Y_hat_node" ~ "Node",     
-      model == "Y_hat_node_nonetwork" ~ "Node\n(no network)",
-      model == "Y_hat_edge" ~ "Edge",
-      model == "Y_hat_egoalter" ~ "Ego-alter",
-      model == "Y_hat_egoalter_passed" ~ "Ego-alter\n(augmented)",
-      model == "Y_hat_egoalter_hardmode" ~ "Ego-alter\n(downsampled)"
-    ),
-    model=factor(model, levels=c('No model', "Node\n(no network)", "Node", "Edge", "Ego-alter", "Ego-alter\n(augmented)", "Ego-alter\n(downsampled)")),
-    sim=case_when(
-      sim == "indep" ~ "Independent",     
-      sim == "degcorr" ~ "Degree",
-      sim == "unobs" ~ "Unobserved",
-      sim == "main" ~ "Main",
-      sim == "weirdsamp" ~ "Sampled",
-      sim == "new_graph_main" ~ "New Graph",
-      sim == "new_graph_indep" ~ "New Graph (indep)",
-      sim == "new_graph_equal" ~ "New Graph (equal)",
-    ),
-    sim=factor(sim, levels=c("Independent", "Degree", "Unobserved", "Main", "Sampled", "New Graph", "New Graph (indep)", "New Graph (equal)"))
-  )
 
-df_bias = bind_rows(
-  df_main_node,
-  df_main_edge,
-  df_weirdsamp_node,
-  df_weirdsamp_edge,
-  df_indep_node,
-  df_indep_edge,
-  df_degcorr_node,
-  df_degcorr_edge,
-  df_unobs_node,
-  df_unobs_edge,
-  df_new_graph_main_node,
-  df_new_graph_main_edge,
-  df_new_graph_equal_node,
-  df_new_graph_equal_edge,
-  df_new_graph_indep_node,
-  df_new_graph_indep_edge
-) %>%
-  mutate(
-    Y_no_model=(Y_no_model - Y_true) / Y_true,
-    Y_hat_node=(Y_hat_node - Y_true) / Y_true,
-    Y_hat_node_nonetwork=(Y_hat_node_nonetwork - Y_true) / Y_true,
-    Y_hat_edge=(Y_hat_edge - Y_true) / Y_true,
-    Y_hat_egoalter=(Y_hat_egoalter - Y_true) / Y_true,
-    Y_hat_egoalter_passed=(Y_hat_egoalter_passed - Y_true) / Y_true,
-    Y_hat_egoalter_hardmode=(Y_hat_egoalter_hardmode - Y_true) / Y_true,
-  ) %>%
-  select(
-    sim,
-    level,
-    Y_no_model,
-    Y_hat_node,
-    Y_hat_node_nonetwork,
-    Y_hat_edge,
-    Y_hat_egoalter,
-    Y_hat_egoalter_passed,
-    Y_hat_egoalter_hardmode
-  ) %>%
-  pivot_longer(Y_no_model:Y_hat_egoalter_hardmode, names_to='model', values_to='val') %>%
-  mutate(
-    model=case_when(
-      model == 'Y_no_model' ~ 'No model',
-      model == "Y_hat_node" ~ "Node",     
-      model == "Y_hat_node_nonetwork" ~ "Node\n(no network)",
-      model == "Y_hat_edge" ~ "Edge",
-      model == "Y_hat_egoalter" ~ "Ego-alter",
-      model == "Y_hat_egoalter_passed" ~ "Ego-alter\n(augmented)",
-      model == "Y_hat_egoalter_hardmode" ~ "Ego-alter\n(downsampled)"
-    ),
-    model=factor(model, levels=c('No model', "Node\n(no network)", "Node", "Edge", "Ego-alter", "Ego-alter\n(augmented)", "Ego-alter\n(downsampled)")),
-    sim=case_when(
-      sim == "indep" ~ "Independent",     
-      sim == "degcorr" ~ "Degree",
-      sim == "unobs" ~ "Unobserved",
-      sim == "main" ~ "Main",
-      sim == "weirdsamp" ~ "Sampled",
-      sim == "new_graph_main" ~ "New Graph",
-      sim == "new_graph_indep" ~ "New Graph (indep)",
-      sim == "new_graph_equal" ~ "New Graph (equal)",
-    ),
-    sim=factor(sim, levels=c("Independent", "Degree", "Unobserved", "Main", "Sampled", "New Graph", "New Graph (indep)", "New Graph (equal)"))
-  )
-
-
-df_perf = bind_rows(
-  df_perf_edge,
-  df_perf_node
-)  %>%
-  mutate(
-    model=case_when(
-      model == "node" ~ "Node",     
-      model == "node_nonetwork" ~ "Node\n(no network)",
-      model == "egoalter" ~ "Ego-alter",
-      model == "egoalter_hardmode" ~ "Ego-alter\n(downsampled)",
-    ),
-    model=factor(model, levels=c("Node\n(no network)", "Node", "Ego-alter", "Ego-alter\n(downsampled)"))
-  ) %>%
-  pivot_longer(auc:accuracy, names_to='metric', values_to='val') %>%
-  mutate(
-    metric=case_when(
-      metric == 'accuracy' ~ 'Accuracy',
-      metric == 'auc' ~ 'AUC',
-      metric == 'precision' ~ 'Precision',
-      metric == 'recall' ~ 'Recall',
-    ),
-    metric=factor(metric, levels=c('AUC', 'Accuracy', 'Precision', 'Recall'))
-  )
-  
+```{r}
+df_perf = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_perf.csv'
+)
 ```
+
 
 
 ## Main sims plot (main text)

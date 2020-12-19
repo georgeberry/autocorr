@@ -1,7 +1,7 @@
 source("sim_code.R")
 
 registerDoParallel(cores=12)
-N_SIMS = 2
+N_SIMS = 100
 N_NODES = 4000
 GROUND_TRUTH_LABELING_BUDGET = 500
 ALPHA = 0.8  # powerlaw exponent
@@ -74,6 +74,24 @@ df_new_runs_high_homophily = fn_par_run(
 write_csv(
   df_new_runs_high_homophily,
   '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_high_homophily.csv'
+)
+
+#### Performance ###############################################################
+
+df_perf = fn_par_run(
+  fn_run_perf,
+  N_SIMS,
+
+  # sim params
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  ALPHA,
+  BETA
+)
+write_csv(
+  df_perf,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_perf.csv'
 )
 
 

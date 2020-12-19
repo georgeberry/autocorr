@@ -326,10 +326,11 @@ fn_edgesamp = function(g) {
 #### Model fitting #############################################################
 
 fn_fit_models = function(g_with_samp) {
-  # fit 7 models
-  # node (no network features)
-  # node (ctrl for ego_deg_inv)
-  # node (ctrl for ego_deg_inv and ego_deg)
+  # fit 8 models
+  # node (ctrl for X_ego)
+  # node (ctrl for X_ego, ego_deg_inv)
+  # node (ctrl for X_ego, ego_deg_inv, ego_deg)
+  # edge (ctrl for X_ego, X_nbr)
   # edge (ctrl for X_ego, X_nbr, ego_deg_inv)
   # edge (ctrl for X_ego, X_nbr, ego_deg_inv, nbr_deg_inv, d_ego, d_nbr)
   # ego-alter (ctrl for X_ego, X_nbr, ego_deg_inv)
@@ -382,7 +383,7 @@ fn_fit_models = function(g_with_samp) {
   df_nodes = g %>% activate(nodes) %>% as_tibble()
   df_edges = g %>% activate(edges) %>% as_tibble()
   node_mod = glm(
-    Y ~ X + outdeg + outdeg_inv,
+    Y ~ X + log1p(outdeg) + outdeg_inv,
     family='binomial',
     data=df_nodes %>%
       filter(gt == 1)
@@ -430,8 +431,8 @@ fn_fit_models = function(g_with_samp) {
       X_nbr +
       outdeg_inv_ego +
       outdeg_inv_nbr +
-      outdeg_ego +
-      outdeg_nbr,
+      log1p(outdeg_ego) +
+      log1p(outdeg_nbr),
     family='binomial',
     data=df_edges %>%
       filter(gt == 1)
@@ -472,8 +473,8 @@ fn_fit_models = function(g_with_samp) {
       X_nbr +
       outdeg_inv_ego +
       outdeg_inv_nbr +
-      outdeg_ego +
-      outdeg_nbr,
+      log1p(outdeg_ego) +
+      log1p(outdeg_nbr),
     family='binomial',
     data=df_edges %>%
       filter(gt_ego == 1)
@@ -487,6 +488,35 @@ fn_fit_models = function(g_with_samp) {
     ) ->
     df_edges
   Y_hat_egoalter_full = sum(
+    df_edges$outdeg_inv_ego *
+    df_edges$Y_ego_hat *
+    df_edges$Y_nbr_hat
+  )
+
+  #### ego-alter (full log features)
+  df_nodes = g %>% activate(nodes) %>% as_tibble()
+  df_edges = g %>% activate(edges) %>% as_tibble()
+  ego_mod = glm(
+    Y_ego ~ X_ego +
+      X_nbr +
+      outdeg_inv_ego +
+      outdeg_inv_nbr +
+      log1p(outdeg_ego) +
+      log1p(outdeg_nbr) +
+      log1p(outdeg_ego) * log1p(outdeg_nbr),
+    family='binomial',
+    data=df_edges %>%
+      filter(gt_ego == 1)
+  )
+  df_edges$Y_ego_hat = predict(ego_mod, newdata=df_edges, type='response')
+  df_edges %>%
+    left_join(
+      df_edges %>%
+        select(from, to, Y_nbr_hat=Y_ego_hat),
+      by=c('from'='to', 'to'='from')
+    ) ->
+    df_edges
+  Y_hat_egoalter_full_log = sum(
     df_edges$outdeg_inv_ego *
     df_edges$Y_ego_hat *
     df_edges$Y_nbr_hat
@@ -516,6 +546,7 @@ fn_fit_models = function(g_with_samp) {
 
       Y_hat_egoalter_basic=Y_hat_egoalter_basic,
       Y_hat_egoalter_full=Y_hat_egoalter_full,
+      Y_hat_egoalter_full_log=Y_hat_egoalter_full_log,
 
       majority_group_homophily=majority_group_homophily
     )
@@ -564,6 +595,45 @@ fn_run_sims = function(
 
 ######## Compute performance metrics ##########################################
 
+fn_run_perf = function(
+  n_nodes,
+  edges_per_new_node,
+  majority_group_frac,
+  alpha,
+  beta
+) {
+  # each time we call this we generate 1 graph, then do 3 types of sampling on
+  # copies of the graph, then run models
+  g = play_bidir_powerlaw_homophily_graph(
+    n_nodes,
+    edges_per_new_node,
+    majority_group_frac,
+    alpha,
+    beta
+  )
+
+  g_nodesamp = fn_nodesamp(g)
+  df_nodesamp = fn_performance(g_nodesamp)
+
+  g_degsamp = fn_degsamp(g)
+  df_degsamp = fn_performance(g_degsamp)
+
+  g_edgesamp = fn_edgesamp(g)
+  df_edgesamp = fn_performance(g_edgesamp)
+
+  return(
+    bind_rows(
+      df_nodesamp %>%
+        mutate(sampling='node'),
+      df_degsamp %>%
+        mutate(sampling='deg'),
+      df_edgesamp %>%
+        mutate(sampling='edge')
+    )
+  )
+
+}
+
 fn_compute_performance_metrics = function(true_vals, probs) {
   auc_val = as.numeric(auc(roc(true_vals, probs)))
   # zero-one predictions
@@ -581,21 +651,21 @@ fn_compute_performance_metrics = function(true_vals, probs) {
   )
 }
 
-fn_performance = function(fn_g) {
-  # fit models, evlauate performance metrics
-  # node no network features (baseline)
-  # node
-  # edge
-  # ego-then-alter
-  # ego-then-alter (with prob passed to alter model)
-  
-  g = fn_g()
-  df_nodes = g %>% activate(nodes) %>% as_tibble()
-  df_edges = g %>% activate(edges) %>% as_tibble()
+fn_performance = function(g_with_samp) {
+  # fit 5 models (can't do edge preds)
+  # node (ctrl for X_ego)
+  # node (ctrl for X_ego, ego_deg_inv)
+  # node (ctrl for X_ego, ego_deg_inv, ego_deg)
+  # ego-alter (ctrl for X_ego, X_nbr, ego_deg_inv)
+  # ego-alter (ctrl for X_ego, X_nbr, ego_deg_inv, nbr_deg_inv, d_ego, d_nbr)
+
+  g = g_with_samp
 
   # node no network features
+  df_nodes = g %>% activate(nodes) %>% as_tibble()
+  df_edges = g %>% activate(edges) %>% as_tibble()
   node_mod = glm(
-    Y ~ X, # + log1p(outdeg),
+    Y ~ X,
     family='binomial',
     data=df_nodes %>%
       filter(gt == 1)
@@ -609,16 +679,18 @@ fn_performance = function(fn_g) {
   node_nonetwork_perf = fn_compute_performance_metrics(
     df_nodes %>%
       filter(gt == 0) %>%
-      .$Y,
+      pull(Y),
     node_preds
   ) %>%
     mutate(
       model='node_nonetwork'
     )
   
-  # nodemod
+  # node basic
+  df_nodes = g %>% activate(nodes) %>% as_tibble()
+  df_edges = g %>% activate(edges) %>% as_tibble()
   node_mod = glm(
-    Y ~ X + outdeg_inv + outdeg,
+    Y ~ X + outdeg_inv,
     family='binomial',
     data=df_nodes %>%
       filter(gt == 1)
@@ -629,19 +701,46 @@ fn_performance = function(fn_g) {
       filter(gt == 0),
     type='response',
   )
-  node_perf = fn_compute_performance_metrics(
+  node_basic_perf = fn_compute_performance_metrics(
     df_nodes %>%
       filter(gt == 0) %>%
-      .$Y,
+      pull(Y),
     node_preds
   ) %>%
     mutate(
-      model='node'
+      model='node_basic'
+    )
+
+  # node full
+  df_nodes = g %>% activate(nodes) %>% as_tibble()
+  df_edges = g %>% activate(edges) %>% as_tibble()
+  node_mod = glm(
+    Y ~ X + outdeg_inv + log1p(outdeg),
+    family='binomial',
+    data=df_nodes %>%
+      filter(gt == 1)
+  )
+  node_preds = predict(
+    node_mod,
+    newdata=df_nodes %>%
+      filter(gt == 0),
+    type='response',
+  )
+  node_full_perf = fn_compute_performance_metrics(
+    df_nodes %>%
+      filter(gt == 0) %>%
+      pull(Y),
+    node_preds
+  ) %>%
+    mutate(
+      model='node_full'
     )
   
-  # ego then alter
+  # ego alter basic
+  df_nodes = g %>% activate(nodes) %>% as_tibble()
+  df_edges = g %>% activate(edges) %>% as_tibble()
   ego_mod = glm(
-    Y_ego ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego,
+    Y_ego ~ X_ego + X_nbr + outdeg_inv_ego,
     family='binomial',
     data=df_edges %>%
       filter(gt_ego == 1)
@@ -658,56 +757,63 @@ fn_performance = function(fn_g) {
       ego_preds=mean(ego_preds),
       Y_ego=mean(Y_ego)
     )
-  egoalter_perf = fn_compute_performance_metrics(
+  egoalter_basic_perf = fn_compute_performance_metrics(
     df_edges_perf %>%
       filter(gt_ego == 0) %>%
-      .$Y_ego,
+      pull(Y_ego),
     df_edges_perf %>%
       filter(gt_ego == 0) %>%
-      .$ego_preds
+      pull(ego_preds)
   ) %>%
     mutate(
-      model='egoalter'
+      model='egoalter_basic'
     )
 
-  # hard mode egoalter perf: randomly remove some ground truth cases
-  ego_mod_hardmode = glm(
-    Y_ego ~ X_ego + X_nbr + outdeg_ego + indeg_nbr + outdeg_inv_ego,
+  # ego alter full
+  df_nodes = g %>% activate(nodes) %>% as_tibble()
+  df_edges = g %>% activate(edges) %>% as_tibble()
+  ego_mod = glm(
+    Y_ego ~ X_ego +
+      X_nbr +
+      log1p(outdeg_ego) +
+      log1p(outdeg_nbr) +
+      outdeg_inv_ego +
+      outdeg_inv_nbr,
     family='binomial',
     data=df_edges %>%
-      filter(gt_ego == 1) %>%
-      sample_frac(0.5)
+      filter(gt_ego == 1)
   )
-  df_edges$ego_preds_hardmode = predict(
-    ego_mod_hardmode,
+  df_edges$ego_preds = predict(
+    ego_mod,
     newdata=df_edges,
     type='response',
   )
-  df_edges_perf_hardmode = df_edges %>%
+  df_edges_perf = df_edges %>%
     group_by(from) %>%
     summarize(
       gt_ego=mean(gt_ego),
-      ego_preds_hardmode=mean(ego_preds_hardmode),
+      ego_preds=mean(ego_preds),
       Y_ego=mean(Y_ego)
     )
-  egoalter_hardmode_perf = fn_compute_performance_metrics(
-    df_edges_perf_hardmode %>%
+  egoalter_full_perf = fn_compute_performance_metrics(
+    df_edges_perf %>%
       filter(gt_ego == 0) %>%
-      .$Y_ego,
-    df_edges_perf_hardmode %>%
+      pull(Y_ego),
+    df_edges_perf %>%
       filter(gt_ego == 0) %>%
-      .$ego_preds_hardmode
+      pull(ego_preds)
   ) %>%
     mutate(
-      model='egoalter_hardmode'
+      model='egoalter_full'
     )
 
   return(
     bind_rows(
-      node_perf,
       node_nonetwork_perf,
-      egoalter_perf,
-      egoalter_hardmode_perf
+      node_basic_perf,
+      node_full_perf,
+      egoalter_basic_perf,
+      egoalter_full_perf
     )
   )
 }
