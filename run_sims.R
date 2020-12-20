@@ -81,6 +81,24 @@ write_csv(
   '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_high_homophily.csv'
 )
 
+
+df_new_runs_x_homophily = fn_par_run(
+  fn_run_sims,
+  N_SIMS,
+
+  # sim params
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  ALPHA,
+  beta=0.0,
+  gamma=0.5
+)
+write_csv(
+  df_new_runs_x_homophily,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_x_homophily.csv'
+)
+
 #### Performance ###############################################################
 
 df_perf = fn_par_run(

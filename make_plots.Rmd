@@ -47,6 +47,49 @@ df_sim = read_csv(
 df_perf = read_csv(
   '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_perf.csv'
 )
+
+df_all = bind_rows(
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_main.csv'
+  ) %>%
+    mutate(
+      kind='main',
+      beta=0.7,
+      gamma=0
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_low_homophily.csv'
+  ) %>%
+    mutate(
+      kind='low',
+      beta=0.4,
+      gamma=0
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_no_homophily.csv'
+  ) %>%
+    mutate(
+      kind='no',
+      beta=0,
+      gamma=0
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_x_homophily.csv'
+  ) %>%
+    mutate(
+      kind='x',
+      beta=0,
+      gamma=0.5
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_high_homophily.csv'
+  ) %>%
+    mutate(
+      kind='high',
+      beta=1.2,
+      gamma=0
+    ),
+)
 ```
 
 ```{r, make_data}
@@ -85,11 +128,30 @@ df = df_sim %>%
         "Ego-alter\n(alternate)"
       ))
     ),
-    Sampling=case_when(
+    sampling=case_when(
       sampling == 'deg' ~ 'Prop. to\ndegree',
       sampling == 'edge' ~ 'Edge',
       sampling == 'node' ~ 'Node',
+    ),
+    sampling=factor(
+      sampling,
+      levels=c(
+        'Edge',
+        'Node',
+        'Prop. to\ndegree'
+      )
     )
+  )
+
+df_big = df_all %>%
+  pivot_longer(
+    cols=Y_no_model:Y_hat_egoalter_full,
+    names_to='model',
+    values_to='model_val'
+  ) %>%
+  mutate(
+    mae=abs(model_val - Y_true) / Y_true,
+    bias=(model_val - Y_true) / Y_true,
   )
 
 df_p = df_perf %>%
@@ -106,10 +168,33 @@ df_p = df_perf %>%
       model == "egoalter_basic" ~ "Ego-alter",
       model == "egoalter_full" ~ "Ego-alter\n(more controls)",
     ),
+    model=factor(
+      model,
+      levels=rev(c(
+        'No model',
+        "Edge",
+        "Edge\n(no network)",
+        "Edge\n(more controls)",
+        "Node",
+        "Node\n(no network)",
+        "Node\n(more controls)",
+        "Ego-alter",
+        "Ego-alter\n(more controls)",
+        "Ego-alter\n(alternate)"
+      ))
+    ),
     sampling=case_when(
-      sampling == 'deg' ~ 'Prop. to degree sampling',
-      sampling == 'edge' ~ 'Edge sampling',
-      sampling == 'node' ~ 'Node sampling',
+      sampling == 'deg' ~ 'Prop. to\ndegree',
+      sampling == 'edge' ~ 'Edge',
+      sampling == 'node' ~ 'Node',
+    ),
+    sampling=factor(
+      sampling,
+      levels=c(
+        'Edge',
+        'Node',
+        'Prop. to\ndegree'
+      )
     )
   )  %>%
   group_by(model, sampling, metric) %>%
@@ -125,304 +210,269 @@ df_p = df_perf %>%
   )
 ```
 
+Main plot
+
 ```{r}
 p1 = df %>%
+  rename(Sampling=sampling) %>%
   filter(!(model %in% c(
     'No model',
-    "Edge\n(more controls)",
-    "Node\n(more controls)"
-  ))) %>% 
-  group_by(model, Sampling) %>%
-  summarize(std=sd(mae) / sqrt(n()), mae=mean(mae)) %>%
-  mutate(lcl = mae - 1.96 * std, ucl = mae + 1.96 * std) %>%
-  ggplot(aes(x=model, y=mae)) +
-  geom_point(aes(color=Sampling), position=position_dodge(width=0.3)) +
-  geom_errorbar(aes(ymin=lcl, ymax=ucl, color=Sampling), width=0.2, position=position_dodge(width=0.3)) +
-  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
-  labs(x='Model', y='Absolute error (percent)', title='Absolute error') +
-  theme_cowplot() +
-  coord_flip()
-
-p2 = df %>%
-  filter(!(model %in% c(
-    'No model',
-    "Edge\n(more controls)",
-    "Node\n(more controls)"
-  ))) %>% 
-  group_by(model, Sampling) %>%
-  summarize(std=sd(bias) / sqrt(n()), Bias=mean(bias)) %>%
-  mutate(lcl = Bias - 1.96 * std, ucl = Bias + 1.96 * std) %>%
-  ggplot(aes(x=model, y=Bias)) +
-  geom_point(aes(color=Sampling), position=position_dodge(width=0.3)) +
-  geom_errorbar(aes(ymin=lcl, ymax=ucl, color=Sampling), width=0.2, position=position_dodge(width=0.3)) +
-  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
-  theme_cowplot() +
-  labs(x='Model', y='Bias (percent)', title='Bias') +
-  theme_cowplot() +
-  coord_flip()
-
-plot_grid(p1, p2, labels = c('A','B'))
-```
-```{r}
-
-```
-```{r}
-
-```
-
-
-
-
-Every model
-
-
-```{r}
-df %>%
-  filter(model != 'No model') %>%
-  group_by(model, Sampling) %>%
-  summarize(std=sd(mae) / sqrt(n()), mae=mean(mae)) %>%
-  mutate(lcl = mae - 1.96 * std, ucl = mae + 1.96 * std) %>%
-  ggplot(aes(x=model, y=mae)) +
-  geom_point(aes(color=Sampling), position=position_dodge(width=0.3)) +
-  geom_errorbar(aes(ymin=lcl, ymax=ucl, color=Sampling), width=0.2, position=position_dodge(width=0.3)) +
-  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
-  labs(x='Model', y='Absolute error (percent)', title='Homophily absolute error') +
-  theme_cowplot() +
-  coord_flip() #+
-  # scale_color_brewer(palette="Set1")
-```
-
-```{r}
-df %>%
-  filter(model != 'No model') %>%
-  group_by(model, Sampling) %>%
-  summarize(std=sd(bias) / sqrt(n()), Bias=mean(bias)) %>%
-  mutate(lcl = Bias - 1.96 * std, ucl = Bias + 1.96 * std) %>%
-  ggplot(aes(x=model, y=Bias)) +
-  geom_point(aes(color=Sampling), position=position_dodge(width=0.3)) +
-  geom_errorbar(aes(ymin=lcl, ymax=ucl, color=Sampling), width=0.2, position=position_dodge(width=0.3)) +
-  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
-  theme_cowplot() +
-  labs(x='Model', y='Bias (percent)', title='Homophily bias') +
-  theme_cowplot() +
-  coord_flip()
-```
-
-
-
-```{r}
-df %>%
-  filter(!(model %in% c(
-    'No model'
-  ))) %>% 
-  group_by(model, sampling) %>%
-  summarize(std=sd(mae) / sqrt(n()), mae=mean(mae)) %>%
-  mutate(lcl = mae - 1.96 * std, ucl = mae + 1.96 * std) %>%
-  ggplot(aes(x=model, y=mae)) +
-  geom_point(aes(color=sampling), position=position_dodge(width=0.3)) +
-  geom_errorbar(aes(ymin=lcl, ymax=ucl, color=sampling), width=0.2, position=position_dodge(width=0.3)) +
-  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
-  theme_cowplot() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
-```
-
-
-
-
-
-```{r}
-df %>%
-  filter(!(model %in% c(
-    'No model'
-  ))) %>% 
-  group_by(model, sampling) %>%
-  summarize(std=sd(bias) / sqrt(n()), bias=mean(bias)) %>%
-  mutate(lcl = bias - 1.96 * std, ucl = bias + 1.96 * std) %>%
-  ggplot(aes(x=model, y=bias)) +
-  geom_point(aes(color=sampling), position=position_dodge(width=0.3)) +
-  geom_errorbar(aes(ymin=lcl, ymax=ucl, color=sampling), width=0.2, position=position_dodge(width=0.3)) +
-  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
-  theme_cowplot() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
-```
-
-```{r}
-df %>%
-  filter(!(model %in% c(
-    'No model',
-    "Edge\n(no network)",
     "Edge\n(more controls)",
     "Node\n(more controls)",
-    "Ego-alter\n(more controls)"
-  ))) %>%
-  ggplot(aes(x=model, y=bias)) +
-  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
-  geom_boxplot() +
-  facet_wrap(~sampling) + 
-  theme_cowplot() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
-```
-
-
-
-
-
-## Main sims plot (main text)
-
-```{r}
-p1 = df_bias %>%
-  filter(sim == 'Main', model != "Ego-alter\n(downsampled)") %>%
-  rename(
-    Sampling=level
-  ) %>%
-  mutate(
-    Sampling=case_when(
-      Sampling == 'edge' ~ 'Edge',
-      Sampling == 'node' ~ 'Node'
-    )
-  ) %>%
-  ggplot(aes(x=model, y=val, fill=Sampling)) +
-  geom_hline(yintercept=0, linetype='dotdash', alpha=0.5) +
-  geom_boxplot() +
-  labs(x='Model', y='Bias (percent)', title='Homophily bias') +
-  guides(fill=FALSE) +
-  theme_cowplot() +
-  theme(
-    axis.text=element_text(size=10)
-  )
-
-p2 = df_mae %>%
-  filter(sim == 'Main', model != "Ego-alter\n(downsampled)") %>%
-  rename(
-    Sampling=level
-  ) %>%
-  mutate(
-    Sampling=case_when(
-      Sampling == 'edge' ~ 'Edge',
-      Sampling == 'node' ~ 'Node'
-    )
-  ) %>%
-  ggplot(aes(x=model, y=val, fill=Sampling)) +
-  geom_hline(yintercept=0, linetype='dotdash', alpha=0.5) +
-  geom_boxplot() +
-  labs(x='Model', y='MAE (percent)', title='Homophily mean absolute error') +
-  theme_cowplot() +
-  theme(
-    legend.position = c(0.7, 0.85),
-    axis.text=element_text(size=10),
-  )
-```
-
-```{r}
-p_main = plot_grid(p1, p2, labels = c('A','B'))
-```
-
-
-## Perf plot
-
-```{r, refine_perf_data}
-
-```
-
-```{r}
-df_perf_plot %>%
-  ggplot(aes(x=val, y=mae, color=model, shape=sampling)) +
-  geom_point() +
-  facet_wrap(~metric)
-```
-
-
-```{r,  fig.width=4, fig.height=1}
-p3 = df_perf %>%
-  group_by(model, metric, sampling) %>%
-  summarize(
-    std=sd(val) / sqrt(n()),
-    val=mean(val)
-  ) %>%
-  inner_join(
-    df_mae %>%
-      filter(sim=='Main') %>%
-      group_by(model, level) %>%
-      summarize(
-        std=sd(val) / sqrt(n()),
-        val=mean(val)
-      ),
-    by=c('model', 'level'),
-    suffix = c('_perf', '_mae')
-  ) %>%
-  rename(
-    Model=model,
-    Sampling=level
-  ) %>%
-  mutate(
-    Sampling=case_when(
-      Sampling == 'edge' ~ 'Edge',
-      Sampling == 'node' ~ 'Node'
-    )
-  ) %>%
-  ggplot(aes(x=val_perf, y=val_mae, color=Model, shape=Sampling)) +
-  geom_hline(yintercept=0, linetype='dotdash') +
-  geom_point(size=2, stroke=2) +
-  facet_wrap(~metric, nrow=1) +
-  lims(y = c(-0.03, 0.2)) +
-  labs(x = element_blank(), y='MAE') +
-  theme_cowplot() +
-  theme(
-    axis.text=element_text(size=8),
-    legend.text=element_text(size=10),
-    legend.position = 'bottom'
+    "Edge\n(no network)"
+  ))) %>% 
+  group_by(model, Sampling) %>%
+  summarize(std=sd(bias) / sqrt(n()), Bias=mean(bias)) %>%
+  mutate(lcl = Bias - 1.96 * std, ucl = Bias + 1.96 * std) %>%
+  ggplot(aes(x=model, y=Bias)) +
+  geom_hline(
+    yintercept = 0,
+    linetype='dotdash',
+    alpha=0.5
   ) +
-  scale_shape_manual(values=c(1,3))
-```
-
-```{r}
-p4 = df_perf %>%
-  filter(model!='Ego-alter\n(downsampled)') %>%
-  group_by(model, metric, level) %>%
-  summarize(
-    std=sd(val) / sqrt(n()),
-    val=mean(val)
-  ) %>%
-  inner_join(
-    df_bias %>%
-      filter(sim=='Main') %>%
-      group_by(model, level) %>%
-      summarize(
-        std=sd(val) / sqrt(n()),
-        val=mean(val)
-      ),
-    by=c('model', 'level'),
-    suffix = c('_perf', '_bias')
-  ) %>%
-  rename(
-    Model=model,
-    Sampling=level
-  ) %>%
-  mutate(
-    Sampling=case_when(
-      Sampling == 'edge' ~ 'Edge',
-      Sampling == 'node' ~ 'Node'
-    )
-  ) %>%
-  ggplot(aes(x=val_perf, y=val_bias, color=Model, shape=Sampling)) +
-  geom_hline(yintercept=0, linetype='dotdash') +
-  geom_point(size=4, stroke=1.5) +
-  facet_wrap(~metric, nrow=1, strip.position ='bottom') +
-  lims(y = c(-0.2, 0.05), x=c(0.71, 0.87)) +
-  labs(x = element_blank(), y='Homophily bias\n(percent)', title='Homophily bias compared to node-level performance') +
+  geom_pointrange(
+    aes(ymin=lcl, ymax=ucl, shape=Sampling, color=model),
+    position=position_dodge(width=0.5),
+    size=0.45
+  ) +
+  guides(color=FALSE, shape=FALSE) +
+  labs(
+    x='Model',
+    y='Bias (percent)',
+    title='Bias'
+  ) +
+  lims(y=c(-0.1, 0.1)) +
   theme_cowplot() +
-  panel_border() +
   theme(
-    axis.text=element_text(size=8),
-    # strip.text.x = element_blank(),
+    axis.text.x=element_text(size=10),
+    axis.text.y=element_text(size=12),
+    axis.title=element_text(size=13),
+    plot.title = element_text(size=14)
   ) +
   scale_color_manual(values=palette) +
-  scale_shape_manual(values=c(1,3))
-  # guides(shape=FALSE, color=FALSE)
+  coord_flip()
+```
+
+```{r}
+p2 = df %>%
+  rename(Sampling=sampling) %>%
+  filter(!(model %in% c(
+    'No model',
+    "Edge\n(more controls)",
+    "Node\n(more controls)",
+    "Edge\n(no network)"
+  ))) %>% 
+  group_by(model, Sampling) %>%
+  summarize(std=sd(mae) / sqrt(n()), mae=mean(mae)) %>%
+  mutate(lcl = mae - 1.96 * std, ucl = mae + 1.96 * std) %>%
+  ggplot(aes(x=model, y=mae)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  geom_pointrange(
+    aes(ymin=lcl, ymax=ucl, shape=Sampling, color=model),
+    position=position_dodge(width=0.5),
+    size=0.45
+  ) +
+  labs(
+    x=element_blank(),
+    y='Absolute error (percent)',
+    title='Absolute error'
+  ) +
+  lims(y=c(0.0, 0.11)) +
+  guides(color=FALSE,  shape = guide_legend(reverse=T)) +
+  theme_cowplot() +
+  theme(
+    legend.position = c(0.7, 0.2),
+    legend.box.background = element_rect(colour = "black"),
+    legend.text=element_text(size=10),
+    legend.title=element_text(size=11),
+    axis.text.x=element_text(size=10),
+    # axis.text.y=element_text(size=10),
+    axis.title=element_text(size=13),
+    axis.title.y=element_blank(),
+    axis.text.y=element_blank(),
+    plot.title = element_text(size=14)
+  ) +
+  scale_color_manual(values=palette) +
+  coord_flip() 
+```
+
+```{r}
+plot_grid(p1, p2, rel_widths = c(1.2, 1))
+```
+```{r}
+ggsave(
+  '/Users/georgeberry/Downloads/p1.pdf',
+  plot_grid(p1, p2, rel_widths = c(1.4, 1)),
+  device='pdf',
+  width=7.04,
+  height=3.5
+)
+```
+
+perf plot
+
+```{r}
+p3 = df_p %>%
+  filter(
+    !(model %in% c(
+      'Node\n(more controls)'
+    )),
+    metric == 'accuracy',
+    sampling == 'Prop. to\ndegree'
+  ) %>% 
+  ggplot(aes(x=val, y=mae, color=model)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  geom_jitter(size=3, width=0.000) +
+  guides(color = FALSE) +
+  lims(x=c(0.84, 0.89), y=c(-0.01, 0.1)) +
+  labs(
+    title='Abs. error by accuracy',
+    x='Accuracy',
+    y='Absolute error (percent)'
+  ) +
+  scale_color_manual(values=palette) +
+  theme_cowplot() +
+  theme(
+    axis.text.x=element_text(size=10),
+    axis.text.y=element_text(size=10),
+    axis.title.x=element_text(size=12),
+    axis.title.y=element_text(size=10),
+    plot.title = element_text(size=13)
+  )
+
+p4 = df_p %>%
+  filter(
+    !(model %in% c(
+      'Node\n(more controls)'
+    )),
+    metric == 'auc',
+    sampling == 'Prop. to\ndegree'
+  ) %>% 
+  ggplot(aes(x=val, y=mae, color=model)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  geom_jitter(size=3, width=0.000) +
+  guides(color = FALSE) +
+  lims(x=c(0.9, 0.95), y=c(-0.01, 0.1)) +
+  labs(
+    title='Abs. error by AUC',
+    x='AUC',
+    y='Absolute error (percent)'
+  ) +
+  scale_color_manual(values=palette) +
+  theme_cowplot() +
+  theme(
+    axis.text.x=element_text(size=10),
+    axis.text.y=element_text(size=10),
+    axis.title.x=element_text(size=12),
+    axis.title.y=element_text(size=10),
+    plot.title = element_text(size=13)
+  )
+
+p5 = df_p %>%
+  filter(
+    !(model %in% c(
+      'Node\n(more controls)'
+    )),
+    metric == 'accuracy',
+    sampling == 'Prop. to\ndegree'
+  ) %>% 
+  ggplot(aes(x=val, y=bias, color=model)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  geom_jitter(size=3, width=0.000) +
+  guides(color = FALSE) +
+  lims(x=c(0.84, 0.89), y=c(-0.1, 0.01)) +
+  labs(
+    title='Bias by Accuracy',
+    x='Accuracy',
+    y='Bias (percent)'
+  ) +
+  scale_color_manual(values=palette) +
+  theme_cowplot() +
+  theme(
+    axis.text.x=element_text(size=10),
+    axis.text.y=element_text(size=10),
+    axis.title=element_text(size=12),
+    plot.title = element_text(size=13)
+  )
+
+p6 = df_p %>%
+  filter(
+    !(model %in% c(
+      'Node\n(more controls)'
+    )),
+    metric == 'auc',
+    sampling == 'Prop. to\ndegree'
+  ) %>% 
+  rename(Model=model) %>%
+  ggplot(aes(x=val, y=bias, color=Model)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  geom_jitter(size=3, width=0.000) +
+  guides(color = guide_legend(reverse=T)) +
+  lims(x=c(0.9, 0.95), y=c(-0.1, 0.01)) +
+  labs(
+    title='Bias by AUC',
+    x='AUC',
+    y='Bias (percent)'
+  ) +
+  scale_color_manual(values=palette) +
+  theme_cowplot() +
+  theme(
+    legend.position = c(0.65, 0.4),
+    legend.box.background = element_rect(colour = "black"),
+    legend.text=element_text(size=8),
+    legend.title=element_text(size=9),
+    axis.text.x=element_text(size=10),
+    axis.text.y=element_text(size=10),
+    axis.title=element_text(size=12),
+    plot.title = element_text(size=13)
+    #axis.title.y=element_blank(),
+    #axis.text.y=element_blank(),
+    #plot.title = element_text(size=14)
+  )
 ```
 
 
+```{r}
+plot_grid(
+  p3, p4, p5, p6,
+  nrow=2, ncol=2,
+  labels=c('A', 'B', 'C', 'D')  
+)
+```
+
+```{r}
+ggsave(
+  '/Users/georgeberry/Downloads/p2.pdf',
+  plot_grid(p3, p4, p5, p6, nrow=2, ncol=2, labels=c('A', 'B', 'C', 'D')),
+  device='pdf',
+  width=8,
+  height=4.7
+)
+```
+
+
+error as homophily varies
  
+```{r}
+df_big %>%
+  group_by(
+    sampling,
+    model,
+    kind 
+  ) %>%
+  summarize(
+    mae=mean(mae),
+    bias=mean(bias)
+  ) %>%
+  ggplot(aes(x=kind, y=bias, color=model, shape=sampling)) +
+  geom_point()
+```
+
+```{r}
+
+```
+
+
 
 
 ## All sims(appendix)
