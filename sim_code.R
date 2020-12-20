@@ -35,105 +35,99 @@ play_bidir_powerlaw_homophily_graph = function(
     n_nodes,
     edges_per_node,
     majority_group_frac,
-    alpha,
-    beta
+    alpha,   # powerlaw exponent
+    beta,    # homophily coefficient
+    gamma=0  # X coefficient
 ) {
+  majority_N = round(n_nodes * majority_group_frac)
+  majority_Y = rep(1, majority_N)
+  majority_X = rnorm(majority_N, 1, 1)
 
-    majority_N = round(n_nodes * majority_group_frac)
-    majority_Y = rep(1, majority_N)
-    majority_Z = rnorm(majority_N, 0, 1)
-    majority_X = 1 + majority_Z
+  minority_N = round(n_nodes * (1 - majority_group_frac))
+  minority_Y = rep(0, minority_N)
+  minority_X = rnorm(minority_N, -1, 1)
 
-    minority_N = round(n_nodes * (1 - majority_group_frac))
-    minority_Y = rep(0, minority_N)
-    minority_Z = rnorm(minority_N, 0, 1)
-    minority_X = -1 + minority_Z
+  # Group
+  Y = c(majority_Y, minority_Y)
+  X = c(majority_X, minority_X)
 
-    # Group
-    Y = c(majority_Y, minority_Y)
+  nodes = 1:n_nodes  # this gives unique ids for each node
 
-    X = c(majority_X, minority_X)
+  node_df = data.frame(
+      Y=Y,
+      X=X
+  )
 
-    Z = c(majority_Z, minority_Z)
+  # Degree
+  D = list()
+  for (node in nodes) {
+      D[[node]] = 0
+  }
 
-    nodes = 1:n_nodes
+  # seed nodes are chose at random and completely connected (clique)
+  # b/c of bidir we do 2 * edges_per_node + 1
+  seeds = sample(nodes, 2 * edges_per_node + 1, replace=FALSE)
 
-    node_df = data.frame(
-        Y=Y,
-        X=X
+  for (seed in seeds) {
+      D[[seed]] = edges_per_node
+  }
+
+  edge_df = expand.grid(seeds, seeds)
+  colnames(edge_df) = c('from', 'to')
+  # filter out self loops
+  edge_df = edge_df %>%
+    filter(from != to)
+
+  node_iter_order = sample(
+    setdiff(nodes, seeds),
+    length(setdiff(nodes, seeds)),
+    replace=FALSE
+  )
+
+  for (node in node_iter_order) {
+      node_grp = Y[node]
+      same_grp_nodes = as.integer(Y == node_grp)
+      for (edge_to_add in 1:edges_per_node) {
+          # Determining a connection is a function of
+          # degree, group_Y, Z
+
+          # Using the conditional logit expression in Overgoor et al 2020
+          deg_probs = exp(
+            alpha * log(unlist(D) + 0.001) +
+            beta * same_grp_nodes +
+            gamma * X
+          )
+          probs = deg_probs / sum(deg_probs)
+
+          draw = sample(
+            nodes,
+            1,
+            replace=FALSE,
+            prob=probs
+          )
+          #  no self-loops; no multi-edges
+          while (
+            (draw == node) | 
+            (nrow(edge_df %>% filter(from == node, to == draw)) >= 1)
+          ) {
+              draw = sample(nodes, 1, replace=FALSE, prob=probs)
+          }
+
+          edge_df = bind_rows(
+              edge_df,
+              data.frame(from=c(node, draw), to=c(draw, node))
+          )
+          D[[node]] = D[[node]] + 1
+          D[[draw]] = D[[draw]] + 1
+      }
+  }
+  return(as_tbl_graph(edge_df)  %>%
+    activate(nodes) %>%
+    mutate(
+        Y=Y[as.integer(name)],
+        X=X[as.integer(name)]
     )
-
-    # Degree
-    D = list()
-    for (node in nodes) {
-        D[[node]] = 0
-    }
-
-    # seed nodes are chose at random and completely connected (clique)
-    # b/c of bidir we do 2 * edges_per_node + 1
-    seeds = sample(nodes, 2 * edges_per_node + 1, replace=FALSE)
-
-    for (seed in seeds) {
-        D[[seed]] = edges_per_node
-    }
-
-    edge_df = expand.grid(seeds, seeds)
-    colnames(edge_df) = c('from', 'to')
-    # filter out self loops
-    edge_df = edge_df %>%
-      filter(from != to)
-
-    node_iter_order = sample(
-      setdiff(nodes, seeds),
-      length(setdiff(nodes, seeds)),
-      replace=FALSE
-    )
-
-    for (node in node_iter_order) {
-        node_grp = Y[node]
-        same_grp_nodes = as.integer(Y == node_grp)
-        for (edge_to_add in 1:edges_per_node) {
-            # Determining a connection is a function of
-            # degree, group_Y, Z
-
-            # Using the conditional logit expression in Overgoor et al 2020
-            deg_probs = exp(
-              alpha * log(unlist(D) + 0.001) +
-              beta * same_grp_nodes
-            )
-            probs = deg_probs / sum(deg_probs)
-
-            draw = sample(
-              nodes,
-              1,
-              replace=FALSE,
-              prob=probs
-            )
-            #  no self-loops; no multi-edges
-            while (
-              (draw == node) | 
-              (nrow(edge_df %>% filter(from == node, to == draw)) >= 1)
-            ) {
-                draw = sample(nodes, 1, replace=FALSE, prob=probs)
-            }
-
-            edge_df = bind_rows(
-                edge_df,
-                data.frame(from=c(node, draw), to=c(draw, node))
-            )
-            D[[node]] = D[[node]] + 1
-            D[[draw]] = D[[draw]] + 1
-        }
-    }
-    return(
-        as_tbl_graph(edge_df)  %>%
-            activate(nodes) %>%
-            mutate(
-                Y=Y[as.integer(name)],
-                X=X[as.integer(name)],
-                Z=Z[as.integer(name)]
-            )
-    )
+  )
 }
 
 
@@ -168,6 +162,8 @@ fn_nodesamp = function(g) {
       indeg_inv_nbr = .N()$indeg_inv[to],
       outdeg_inv_ego = .N()$outdeg_inv[from],
       outdeg_inv_nbr = .N()$outdeg_inv[to],
+      name_ego = .N()$name[from],
+      name_nbr = .N()$name[to],
       gt_ego = .N()$gt[from],
       gt_nbr = .N()$gt[to],
       gt = as.numeric(gt_ego & gt_nbr),
@@ -218,6 +214,8 @@ fn_degsamp = function(g) {
       indeg_inv_nbr = .N()$indeg_inv[to],
       outdeg_inv_ego = .N()$outdeg_inv[from],
       outdeg_inv_nbr = .N()$outdeg_inv[to],
+      name_ego = .N()$name[from],
+      name_nbr = .N()$name[to],
       gt_ego = .N()$gt[from],
       gt_nbr = .N()$gt[to],
       gt = as.numeric(gt_ego & gt_nbr),
@@ -257,6 +255,8 @@ fn_edgesamp = function(g) {
       indeg_inv_nbr = .N()$indeg_inv[to],
       outdeg_inv_ego = .N()$outdeg_inv[from],
       outdeg_inv_nbr = .N()$outdeg_inv[to],
+      name_ego = .N()$name[from],
+      name_nbr = .N()$name[to],
       # sample at edge level
       X_ego = .N()$X[from],
       X_nbr = .N()$X[to],
@@ -266,7 +266,7 @@ fn_edgesamp = function(g) {
   numbered_edges = g %>%
     activate(edges) %>%
     as_tibble() %>%
-    select(from, to, rand_num)
+    select(from, to, name_ego, name_nbr, rand_num)
 
   # literally just iterate through until the N of GT nodes is within 1 of
   # the desired
@@ -291,19 +291,22 @@ fn_edgesamp = function(g) {
       filter(rand_num <= i),
     numbered_edges %>%
       filter(rand_num <= i) %>%
-      select(from=to, to=from) %>%
+      select(from=to, to=from, name_ego=name_nbr, name_nbr=name_ego) %>%
       inner_join(
         numbered_edges,
-        by=c('from', 'to')
+        by=c('from', 'to', 'name_ego', 'name_nbr')
       )
     )
   gt_edges_num = unique(gt_edges$rand_num)
-  gt_nodes = unique(c(gt_edges$from, gt_edges$to))
+
+  # note that name != the edge indexes of (from, to)
+  # so we need to convert from (from, to) to name
+  gt_nodes = unique(c(gt_edges$name_ego, gt_edges$name_nbr))
 
   g = g %>%
     activate(edges) %>%
     mutate(
-      gt = rand_num %in% gt_edges_num 
+      gt = as.integer(rand_num %in% gt_edges_num)
     ) %>%
     # for any node who is part of a gt edge, give that node gt=1
     activate(nodes) %>%
@@ -493,35 +496,6 @@ fn_fit_models = function(g_with_samp) {
     df_edges$Y_nbr_hat
   )
 
-  #### ego-alter (full log features)
-  df_nodes = g %>% activate(nodes) %>% as_tibble()
-  df_edges = g %>% activate(edges) %>% as_tibble()
-  ego_mod = glm(
-    Y_ego ~ X_ego +
-      X_nbr +
-      outdeg_inv_ego +
-      outdeg_inv_nbr +
-      log1p(outdeg_ego) +
-      log1p(outdeg_nbr) +
-      log1p(outdeg_ego) * log1p(outdeg_nbr),
-    family='binomial',
-    data=df_edges %>%
-      filter(gt_ego == 1)
-  )
-  df_edges$Y_ego_hat = predict(ego_mod, newdata=df_edges, type='response')
-  df_edges %>%
-    left_join(
-      df_edges %>%
-        select(from, to, Y_nbr_hat=Y_ego_hat),
-      by=c('from'='to', 'to'='from')
-    ) ->
-    df_edges
-  Y_hat_egoalter_full_log = sum(
-    df_edges$outdeg_inv_ego *
-    df_edges$Y_ego_hat *
-    df_edges$Y_nbr_hat
-  )
-
   tmp = df_edges %>%
     filter(Y_ego == 1) %>%
     group_by(Y_ego, Y_nbr) %>%
@@ -546,7 +520,6 @@ fn_fit_models = function(g_with_samp) {
 
       Y_hat_egoalter_basic=Y_hat_egoalter_basic,
       Y_hat_egoalter_full=Y_hat_egoalter_full,
-      Y_hat_egoalter_full_log=Y_hat_egoalter_full_log,
 
       majority_group_homophily=majority_group_homophily
     )
@@ -558,7 +531,8 @@ fn_run_sims = function(
   edges_per_new_node,
   majority_group_frac,
   alpha,
-  beta
+  beta,
+  gamma
 ) {
   # each time we call this we generate 1 graph, then do 3 types of sampling on
   # copies of the graph, then run models
@@ -567,7 +541,8 @@ fn_run_sims = function(
     edges_per_new_node,
     majority_group_frac,
     alpha,
-    beta
+    beta,
+    gamma
   )
 
   g_nodesamp = fn_nodesamp(g)

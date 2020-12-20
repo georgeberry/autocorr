@@ -5,7 +5,8 @@ N_SIMS = 100
 N_NODES = 4000
 GROUND_TRUTH_LABELING_BUDGET = 500
 ALPHA = 0.8  # powerlaw exponent
-BETA = 0.7  # strength of homophily
+BETA = 0.7   # strength of homophily
+GAMMA = 0.0  # if you want association based on X directly, set to 0 by default
 EDGES_PER_NEW_NODE = 5
 MAJORITY_GROUP_FRAC = 0.7
 
@@ -20,7 +21,8 @@ df_new_runs_no_homophily = fn_par_run(
   EDGES_PER_NEW_NODE,
   MAJORITY_GROUP_FRAC,
   ALPHA,
-  0.0
+  beta=0.0,
+  gamma=0.0
 )
 write_csv(
   df_new_runs_no_homophily,
@@ -36,7 +38,8 @@ df_new_runs_low_homophily = fn_par_run(
   EDGES_PER_NEW_NODE,
   MAJORITY_GROUP_FRAC,
   ALPHA,
-  0.4
+  beta=0.4,
+  gamma=0.0
 )
 write_csv(
   df_new_runs_low_homophily,
@@ -52,7 +55,8 @@ df_new_runs_main = fn_par_run(
   EDGES_PER_NEW_NODE,
   MAJORITY_GROUP_FRAC,
   ALPHA,
-  BETA
+  beta=BETA,
+  gamma=0.0
 )
 write_csv(
   df_new_runs_main,
@@ -69,7 +73,8 @@ df_new_runs_high_homophily = fn_par_run(
   EDGES_PER_NEW_NODE,
   MAJORITY_GROUP_FRAC,
   ALPHA,
-  1.2
+  beta=1.2,
+  gamma=0.0
 )
 write_csv(
   df_new_runs_high_homophily,
