@@ -33,7 +33,7 @@ g = play_bidir_powerlaw_homophily_graph(
   EDGES_PER_NEW_NODE,
   MAJORITY_GROUP_FRAC,
   0.8,
-  1.2
+  0.7
 )
 g = fn_edgesamp(g)
 df_nodes = g %>% activate(nodes) %>% as_tibble()
@@ -394,5 +394,30 @@ df = read_csv(
 
 ```{r}
 df %>% summarize_all(mean)
+```
+
+### homophily calc
+
+```{r}
+  tmp = df_edges %>%
+    filter(Y_ego == 1) %>%
+    group_by(Y_ego, Y_nbr) %>%
+    tally()
+  ingroup_links = tmp %>% filter(Y_ego == 1, Y_nbr == 1) %>% pull(n)
+  crossgroup_links = tmp %>% filter(Y_ego == 1, Y_nbr == 0) %>% pull(n)
+  # divide the ingroup links by 2 to avoid double counting
+  actual = ingroup_links / (ingroup_links + crossgroup_links)
+  (actual - MAJORITY_GROUP_FRAC) / (1 - MAJORITY_GROUP_FRAC)
+```
+
+```{r}
+  tmp = df_edges %>%
+    filter(Y_ego == 0) %>%
+    group_by(Y_ego, Y_nbr) %>%
+    tally()
+  ingroup_links = tmp %>% filter(Y_ego == 0, Y_nbr == 0) %>% pull(n)
+  crossgroup_links = tmp %>% filter(Y_ego == 0, Y_nbr == 1) %>% pull(n)
+  actual = ingroup_links / (ingroup_links + crossgroup_links)
+  (actual - 0.3) / (1 - 0.3)
 ```
 

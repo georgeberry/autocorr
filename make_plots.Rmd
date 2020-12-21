@@ -106,12 +106,12 @@ df = df_sim %>%
       model == 'Y_no_model' ~ 'No model',
       model == "Y_hat_node_nonetwork" ~ "Node\n(no network)",
       model == "Y_hat_node_basic" ~ "Node",
-      model == "Y_hat_node_full" ~ "Node\n(more controls)",
+      model == "Y_hat_node_full" ~ "Node\n(more covariates)",
       model == "Y_hat_edge_nonetwork" ~ "Edge\n(no network)",
       model == "Y_hat_edge_basic" ~ "Edge",
-      model == "Y_hat_edge_full" ~ "Edge\n(more controls)",
+      model == "Y_hat_edge_full" ~ "Edge\n(more covariates)",
       model == "Y_hat_egoalter_basic" ~ "Ego-alter",
-      model == "Y_hat_egoalter_full" ~ "Ego-alter\n(more controls)",
+      model == "Y_hat_egoalter_full" ~ "Ego-alter\n(more covariates)",
     ),
     model=factor(
       model,
@@ -119,12 +119,12 @@ df = df_sim %>%
         'No model',
         "Edge",
         "Edge\n(no network)",
-        "Edge\n(more controls)",
+        "Edge\n(more covariates)",
         "Node",
         "Node\n(no network)",
-        "Node\n(more controls)",
+        "Node\n(more covariates)",
         "Ego-alter",
-        "Ego-alter\n(more controls)",
+        "Ego-alter\n(more covariates)",
         "Ego-alter\n(alternate)"
       ))
     ),
@@ -152,6 +152,63 @@ df_big = df_all %>%
   mutate(
     mae=abs(model_val - Y_true) / Y_true,
     bias=(model_val - Y_true) / Y_true,
+    model=case_when(
+      model == 'Y_no_model' ~ 'No model',
+      model == "Y_hat_node_nonetwork" ~ "Node\n(no network)",
+      model == "Y_hat_node_basic" ~ "Node",
+      model == "Y_hat_node_full" ~ "Node\n(more covariates)",
+      model == "Y_hat_edge_nonetwork" ~ "Edge\n(no network)",
+      model == "Y_hat_edge_basic" ~ "Edge",
+      model == "Y_hat_edge_full" ~ "Edge\n(more covariates)",
+      model == "Y_hat_egoalter_basic" ~ "Ego-alter",
+      model == "Y_hat_egoalter_full" ~ "Ego-alter\n(more covariates)",
+    ),
+    model=factor(
+      model,
+      levels=rev(c(
+        'No model',
+        "Edge",
+        "Edge\n(no network)",
+        "Edge\n(more covariates)",
+        "Node",
+        "Node\n(no network)",
+        "Node\n(more covariates)",
+        "Ego-alter",
+        "Ego-alter\n(more covariates)",
+        "Ego-alter\n(alternate)"
+      ))
+    ),
+    sampling=case_when(
+      sampling == 'deg' ~ 'Prop. to\ndegree',
+      sampling == 'edge' ~ 'Edge',
+      sampling == 'node' ~ 'Node',
+    ),
+    sampling=factor(
+      sampling,
+      levels=c(
+        'Edge',
+        'Node',
+        'Prop. to\ndegree'
+      )
+    ),
+    
+    kind=case_when(
+      kind == 'no' ~ 'No homophily',
+      kind == 'low' ~ 'Low homophily',
+      kind == 'main' ~ 'Main simulations',
+      kind == 'x' ~ 'Homophily on X',
+      kind == 'high' ~ 'High homophily',
+    ),
+    kind=factor(
+      kind,
+      levels=c(
+        'No homophily',
+        'Low homophily',
+        'Main simulations',
+        'Homophily on X',
+        'High homophily'
+      )
+    ),
   )
 
 df_p = df_perf %>%
@@ -164,9 +221,9 @@ df_p = df_perf %>%
     model=case_when(
       model == "node_nonetwork" ~ "Node\n(no network)",
       model == "node_basic" ~ "Node",
-      model == "node_full" ~ "Node\n(more controls)",
+      model == "node_full" ~ "Node\n(more covariates)",
       model == "egoalter_basic" ~ "Ego-alter",
-      model == "egoalter_full" ~ "Ego-alter\n(more controls)",
+      model == "egoalter_full" ~ "Ego-alter\n(more covariates)",
     ),
     model=factor(
       model,
@@ -174,12 +231,12 @@ df_p = df_perf %>%
         'No model',
         "Edge",
         "Edge\n(no network)",
-        "Edge\n(more controls)",
+        "Edge\n(more covariates)",
         "Node",
         "Node\n(no network)",
-        "Node\n(more controls)",
+        "Node\n(more covariates)",
         "Ego-alter",
-        "Ego-alter\n(more controls)",
+        "Ego-alter\n(more covariates)",
         "Ego-alter\n(alternate)"
       ))
     ),
@@ -217,8 +274,8 @@ p1 = df %>%
   rename(Sampling=sampling) %>%
   filter(!(model %in% c(
     'No model',
-    "Edge\n(more controls)",
-    "Node\n(more controls)",
+    "Edge\n(more covariates)",
+    "Node\n(more covariates)",
     "Edge\n(no network)"
   ))) %>% 
   group_by(model, Sampling) %>%
@@ -251,15 +308,13 @@ p1 = df %>%
   ) +
   scale_color_manual(values=palette) +
   coord_flip()
-```
 
-```{r}
 p2 = df %>%
   rename(Sampling=sampling) %>%
   filter(!(model %in% c(
     'No model',
-    "Edge\n(more controls)",
-    "Node\n(more controls)",
+    "Edge\n(more covariates)",
+    "Node\n(more covariates)",
     "Edge\n(no network)"
   ))) %>% 
   group_by(model, Sampling) %>%
@@ -297,9 +352,6 @@ p2 = df %>%
 ```
 
 ```{r}
-plot_grid(p1, p2, rel_widths = c(1.2, 1))
-```
-```{r}
 ggsave(
   '/Users/georgeberry/Downloads/p1.pdf',
   plot_grid(p1, p2, rel_widths = c(1.4, 1)),
@@ -315,7 +367,7 @@ perf plot
 p3 = df_p %>%
   filter(
     !(model %in% c(
-      'Node\n(more controls)'
+      'Node\n(more covariates)'
     )),
     metric == 'accuracy',
     sampling == 'Prop. to\ndegree'
@@ -343,7 +395,7 @@ p3 = df_p %>%
 p4 = df_p %>%
   filter(
     !(model %in% c(
-      'Node\n(more controls)'
+      'Node\n(more covariates)'
     )),
     metric == 'auc',
     sampling == 'Prop. to\ndegree'
@@ -371,7 +423,7 @@ p4 = df_p %>%
 p5 = df_p %>%
   filter(
     !(model %in% c(
-      'Node\n(more controls)'
+      'Node\n(more covariates)'
     )),
     metric == 'accuracy',
     sampling == 'Prop. to\ndegree'
@@ -398,7 +450,7 @@ p5 = df_p %>%
 p6 = df_p %>%
   filter(
     !(model %in% c(
-      'Node\n(more controls)'
+      'Node\n(more covariates)'
     )),
     metric == 'auc',
     sampling == 'Prop. to\ndegree'
@@ -433,14 +485,6 @@ p6 = df_p %>%
 
 
 ```{r}
-plot_grid(
-  p3, p4, p5, p6,
-  nrow=2, ncol=2,
-  labels=c('A', 'B', 'C', 'D')  
-)
-```
-
-```{r}
 ggsave(
   '/Users/georgeberry/Downloads/p2.pdf',
   plot_grid(p3, p4, p5, p6, nrow=2, ncol=2, labels=c('A', 'B', 'C', 'D')),
@@ -454,123 +498,284 @@ ggsave(
 error as homophily varies
  
 ```{r}
-df_big %>%
+
+p7 = df_big %>%
+  filter(
+    !(model %in% c(
+      'No model',
+      "Edge\n(more covariates)",
+      "Node\n(more covariates)",
+      "Edge\n(no network)"
+    )),
+    sampling=='Edge',
+    kind != 'Homophily on X'
+  ) %>% 
+  rename(Model=model) %>%
   group_by(
     sampling,
-    model,
-    kind 
+    Model,
+    kind
   ) %>%
   summarize(
     mae=mean(mae),
-    bias=mean(bias)
+    bias=mean(bias),
+    h=mean(majority_group_homophily)
   ) %>%
-  ggplot(aes(x=kind, y=bias, color=model, shape=sampling)) +
-  geom_point()
-```
+  ggplot(aes(x=h, y=bias, color=Model)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  geom_line() +
+  geom_point(size=3) +
+  guides(color = guide_legend(reverse=T)) +
+  theme_cowplot() +
+  scale_color_manual(values=palette) +
+  labs(
+    title='Bias by level of homophily',
+    x='Coleman\'s homophily index',
+    y='Bias (percent)'
+  ) +
+  lims(x=c(0.0, 0.55), y=c(-0.13, 0.01)) +
+  theme(
+    legend.position = c(0.01, 0.29),
+    legend.box.background = element_rect(colour = "black"),
+    legend.text=element_text(size=8),
+    legend.title=element_text(size=9),
+    axis.text.x=element_text(size=10),
+    axis.text.y=element_text(size=10),
+    axis.title=element_text(size=12),
+    plot.title = element_text(size=13)
+    #axis.title.y=element_blank(),
+    #axis.text.y=element_blank(),
+    #plot.title = element_text(size=14)
+  )
 
-```{r}
-
-```
-
-
-
-
-## All sims(appendix)
-
-
-```{r}
-p5 = df_bias %>%
-  filter(model != "Ego-alter\n(downsampled)") %>%
-  mutate(
-    val=ifelse(abs(val) > 0.4, sign(val) * 0.4, val)
+p8 = df_big %>%
+  filter(
+    !(model %in% c(
+      'No model',
+      "Edge\n(more covariates)",
+      "Node\n(more covariates)",
+      "Edge\n(no network)"
+    )),
+    sampling=='Edge',
+    kind != 'Homophily on X'
+  ) %>% 
+  group_by(
+    sampling,
+    model,
+    kind
   ) %>%
-  group_by(sim, level, model) %>%
   summarize(
-    std=sd(val),
-    val=mean(val)
+    mae=mean(mae),
+    bias=mean(bias),
+    h=mean(majority_group_homophily)
   ) %>%
-  ungroup() %>%
+  ggplot(aes(x=h, y=mae, color=model)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  geom_line() +
+  geom_point(size=3) +
+  guides(color = FALSE) +
+  theme_cowplot() +
+  labs(
+    title='Absolute error by level of homophily',
+    x='Coleman\'s homophily index',
+    y='Absolute error (percent)'
+  ) +
+  theme(
+    axis.text.x=element_text(size=10),
+    axis.text.y=element_text(size=10),
+    axis.title=element_text(size=12),
+    plot.title = element_text(size=13)
+  ) +
+  lims(x=c(0.0, 0.55), y=c(-0.01, 0.13)) +
+  scale_color_manual(values=palette)
+```
+
+
+```{r}
+ggsave(
+  '/Users/georgeberry/Downloads/p3.pdf',
+  plot_grid(
+    p7, p8,
+    labels=c('A', 'B')  
+  ),
+  device='pdf',
+  width=7.94,
+  height=3.29
+)
+```
+
+
+homophily on x vs y
+
+```{r}
+p9 = df_big %>%
   mutate(
-    level=case_when(
-      level=='edge' ~ 'Edge sample',
-      level=='node' ~ 'Node sample'
+    kind=case_when(
+      as.character(kind) == 'Main simulations' ~ 'Homophily on Y',
+      TRUE ~ as.character(kind)
+    ),
+    kind=factor(
+      kind,
+      levels=c(
+        'Homophily on Y',
+        'Homophily on X'
+      )
     )
   ) %>%
-  rename(
-    Simulation=sim
+  filter(
+    !(model %in% c(
+      'No model',
+      "Edge\n(more covariates)",
+      "Node\n(more covariates)",
+      "Edge\n(no network)"
+    )),
+    sampling=='Edge',
+    kind %in% c(
+      'Homophily on X',
+      'Homophily on Y'
+    )
+  ) %>% 
+  rename(Model=model) %>%
+  group_by(
+    sampling,
+    Model,
+    kind
   ) %>%
-  ggplot(aes(x=model, y=val, color=Simulation)) +
-  geom_hline(yintercept=0, alpha=0.5, linetype='dotdash') +
-  #geom_boxplot() +
-  geom_point(position=position_dodge(width=0.6)) +
-  geom_errorbar(
-    aes(ymin=val - std, ymax = val + std),
-    position=position_dodge(width=0.6),
-    width=0.0
-  ) +
+  summarize(
+    mae=mean(mae),
+    bias=mean(bias),
+    h=mean(majority_group_homophily)
+  ) %>%
+  ggplot(aes(x=kind, y=bias, color=Model)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  geom_point(size=3) +
+  theme_cowplot() +
   guides(colour = guide_legend(reverse=T)) +
   scale_color_manual(values=palette) +
   labs(
-    x='Model',
+    title='Bias by source of homophily',
     y='Bias (percent)',
-    title='Comparison of all models across five simulations') + 
-  theme_cowplot() +
-  theme(
-    legend.position="top",
-    axis.text=element_text(size=10)
+    x=element_blank()
   ) +
-  coord_flip() +
-  panel_border() +
-  facet_wrap(~level)
+  lims(y=c(-0.1, 0.01)) +
+  theme(
+    legend.position = c(0.6, 0.35),
+    legend.box.background = element_rect(colour = "black"),
+    legend.text=element_text(size=8),
+    legend.title=element_text(size=9),
+    axis.text.x=element_text(size=10),
+    axis.text.y=element_text(size=10),
+    axis.title=element_text(size=12),
+    plot.title = element_text(size=13)
+  )
 
-p6 = df_mae %>%
-  filter(model != "Ego-alter\n(downsampled)") %>%
-  mutate(
-    val=ifelse(abs(val) > 0.4, sign(val) * 0.4, val)
+p10 = df_big %>%
+  filter(
+    model %in% c(
+      "Node",
+      "Node\n(more covariates)",
+      "Edge",
+      "Edge\n(more covariates)",
+      "Ego-alter",
+      "Ego-alter\n(more covariates)"
+    ),
+    sampling=='Edge',
+    kind == 'Main simulations'
   ) %>%
-  #group_by(sim, level, model) %>%
-  #summarize(
-  #  std=sd(val),
-  #  val=mean(val)
-  #) %>%
-  #ungroup() %>%
   mutate(
-    level=case_when(
-      level=='edge' ~ 'Edge sample',
-      level=='node' ~ 'Node sample'
+    `More covariates`=case_when(
+      grepl("(more covariates)", model) ~ 'Yes',
+      TRUE ~ 'No',
+    ),
+    Model=case_when(
+      grepl("Ego-alter", model) ~ 'Ego-alter',
+      grepl("Node", model) ~ 'Node',
+      grepl("Edge", model) ~ 'Edge',
     )
   ) %>%
-  rename(
-    Simulation=sim
+  group_by(
+    sampling,
+    Model,
+    `More covariates`
   ) %>%
-  ggplot(aes(x=model, y=val, color=Simulation)) +
-  geom_hline(yintercept=0, alpha=0.5, linetype='dotdash') +
-  #geom_violin() +
-  geom_boxplot() +
-  #geom_point(position=position_dodge(width=0.6)) +
-  #geom_errorbar(
-  #  aes(ymin=val - std, ymax = val + std),
-  #  position=position_dodge(width=0.6),
-  #  width=0.0
-  #) +
-  guides(colour = guide_legend(reverse=T)) +
-  scale_color_manual(values=palette) +
-  labs(x='Model', y='Mean absolute error (percent)') + 
+  summarize(
+    mae=mean(mae),
+    bias=mean(bias),
+    h=mean(majority_group_homophily)
+  ) %>%
+  ggplot(aes(x=Model, y=bias, color=Model, shape=`More covariates`)) +
+  geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
+  geom_jitter(size=3, width=.2, alpha=0.7) +
   theme_cowplot() +
-  coord_flip() +
-  theme(
-    legend.position = 'none',
-    axis.text=element_text(size=10)
+  scale_color_manual(values=palette) +
+  labs(
+    title='Adding additional covariates\nfor bias reduction',
+    y='Bias (percent)',
+    x='Model'
   ) +
-  panel_border() +
-  facet_wrap(~level)
+  lims(y=c(-0.1, 0.01)) +
+  guides(shape = guide_legend(reverse=T), color=FALSE) +
+  theme(
+    legend.position = c(0.1, 0.2),
+    legend.box.background = element_rect(colour = "black"),
+    legend.text=element_text(size=8),
+    legend.title=element_text(size=9),
+    axis.text.x=element_text(size=10),
+    axis.text.y=element_text(size=10),
+    axis.title=element_text(size=12),
+    plot.title = element_text(size=13),
+  )
 ```
-
-
 
 ```{r}
-plot_grid(p5, p6, ncol=1, rel_heights=c(1.15,1), labels=c('A', 'B'))
+ggsave(
+  '/Users/georgeberry/Downloads/p4.pdf',
+  plot_grid(
+    p9, p10,
+    labels=c('A', 'B')  
+  ),
+  device='pdf',
+  width=7.94,
+  height=3.29
+)
 ```
+
+```{r}
+df_big %>%
+  filter(
+    model %in% c(
+      "Node",
+      "Node\n(more covariates)",
+      "Edge",
+      "Edge\n(more covariates)",
+      "Ego-alter",
+      "Ego-alter\n(more covariates)"
+    ),
+    kind == 'Main simulations'
+  ) %>%
+  mutate(
+    `More covariates`=case_when(
+      grepl("(more covariates)", model) ~ 'Yes',
+      TRUE ~ 'No',
+    ),
+    Model=case_when(
+      grepl("Ego-alter", model) ~ 'Ego-alter',
+      grepl("Node", model) ~ 'Node',
+      grepl("Edge", model) ~ 'Edge',
+    )
+  ) %>%
+  group_by(
+    sampling,
+    Model,
+    `More covariates`
+  ) %>%
+  summarize(
+    mae=mean(mae),
+    bias=mean(bias),
+    h=mean(majority_group_homophily)
+  ) %>% View()
+```
+
 
 #### MAKE A TABLE FOR THE CURIOUS
 

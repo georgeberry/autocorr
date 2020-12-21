@@ -92,7 +92,7 @@ df_new_runs_x_homophily = fn_par_run(
   MAJORITY_GROUP_FRAC,
   ALPHA,
   beta=0.0,
-  gamma=0.5
+  gamma=0.7
 )
 write_csv(
   df_new_runs_x_homophily,
