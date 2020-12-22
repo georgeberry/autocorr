@@ -496,14 +496,17 @@ fn_fit_models = function(g_with_samp) {
     df_edges$Y_nbr_hat
   )
 
-  tmp = df_edges %>%
-    filter(Y_ego == 1) %>%
-    group_by(Y_ego, Y_nbr) %>%
-    tally()
-  ingroup_links = tmp %>% filter(Y_ego == 1, Y_nbr == 1) %>% pull(n)
-  crossgroup_links = tmp %>% filter(Y_ego == 1, Y_nbr == 0) %>% pull(n)
-  actual = ingroup_links / (ingroup_links + crossgroup_links)
-  majority_group_homophily = (actual - MAJORITY_GROUP_FRAC) / (1 - MAJORITY_GROUP_FRAC)
+  #tmp = df_edges %>%
+  #  filter(Y_ego == 1) %>%
+  #  group_by(Y_ego, Y_nbr) %>%
+  #  tally()
+  #ingroup_links = tmp %>% filter(Y_ego == 1, Y_nbr == 1) %>% pull(n)
+  #crossgroup_links = tmp %>% filter(Y_ego == 1, Y_nbr == 0) %>% pull(n)
+  #actual = ingroup_links / (ingroup_links + crossgroup_links)
+  #majority_group_homophily = (actual - MAJORITY_GROUP_FRAC) / (1 - MAJORITY_GROUP_FRAC)
+
+  majority_group_homophily = sum(df_edges$outdeg_inv_ego * df_edges$Y) / sum(df_nodes$Y)
+  majority_group_homophily_normalized = (majority_group_homophily - MAJORITY_GROUP_FRAC) / (1 - MAJORITY_GROUP_FRAC)
 
   return(
     data.frame( 
@@ -521,7 +524,8 @@ fn_fit_models = function(g_with_samp) {
       Y_hat_egoalter_basic=Y_hat_egoalter_basic,
       Y_hat_egoalter_full=Y_hat_egoalter_full,
 
-      majority_group_homophily=majority_group_homophily
+      majority_group_homophily=majority_group_homophily,
+      majority_group_homophily_normalized=majority_group_homophily_normalized
     )
   )
 }
