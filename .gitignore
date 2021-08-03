@@ -37,6 +37,5 @@ rsconnect/
 
 *.DS_Store
 
-*.csv
 *.ipynb_checkpoints/
 *.ipynb

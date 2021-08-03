@@ -2,16 +2,20 @@
 
 Please cite as:
 
-"Going beyond accuracy: estimating homophily in social networks using predictions". George Berry, Antonio Sirianni, Ingmar Weber, Jisun An, and Michael Macy. arxiv:2001.11171. 2020.
+"Estimating Homophily in Social Networks Using Dyadic Predictions". George Berry, Antonio Sirianni, Ingmar Weber, Jisun An, and Michael Macy. Sociological Science. 2021.
 
 ```
-@misc{berry2020going,
-    title={Going beyond accuracy: estimating homophily in social networks using predictions},
-    author={George Berry and Antonio Sirianni and Ingmar Weber and Jisun An and Michael Macy},
-    year={2020},
-    eprint={2001.11171},
-    archivePrefix={arXiv},
-    primaryClass={cs.SI}
+@article{Berry_2021,
+author = {George Berry and Antonio Sirianni and Ingmar Weber and Jisun An and Michael Macy },
+title = {Estimating Homophily in Social Networks Using Dyadic Predictions},
+journal = {Sociological Science},
+volume = {8},
+number = {14},
+issn = {2330-6696},
+url = {http://dx.doi.org/10.15195/v8.a14},
+doi = {10.15195/v8.a14},
+pages = {285--307},
+year = {2021},
 }
 ```
 
