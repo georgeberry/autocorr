@@ -1,0 +1,280 @@
+---
+title: "make tables"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(xtable)
+library(tidyverse)
+library(cowplot)
+library(scales)
+```
+
+```{r}
+
+df_all = bind_rows(
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_main.csv'
+  ) %>%
+    mutate(
+      kind='main',
+      beta=0.7,
+      gamma=0
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_low_homophily.csv'
+  ) %>%
+    mutate(
+      kind='low',
+      beta=0.4,
+      gamma=0
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_no_homophily.csv'
+  ) %>%
+    mutate(
+      kind='no',
+      beta=0,
+      gamma=0
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_x_homophily.csv'
+  ) %>%
+    mutate(
+      kind='x',
+      beta=0,
+      gamma=0.5
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_high_homophily.csv'
+  ) %>%
+    mutate(
+      kind='high',
+      beta=1.2,
+      gamma=0
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_main_heterophily.csv'
+  ) %>%
+    mutate(
+      kind='main_heterophily',
+      beta=-0.7,
+      gamma=0
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_low_heterophily.csv'
+  ) %>%
+    mutate(
+      kind='low_heterophily',
+      beta=-0.4,
+      gamma=0
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_x_heterophily.csv'
+  ) %>%
+    mutate(
+      kind='x_heterophily',
+      beta=0,
+      gamma=-0.5
+    ),
+  read_csv(
+    '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_high_heterophily.csv'
+  ) %>%
+    mutate(
+      kind='high_heterophily',
+      beta=-1.2,
+      gamma=0
+    ),
+)
+```
+
+```{r}
+
+df_big = df_all %>%
+  pivot_longer(
+    cols=Y_no_model:Y_hat_egoalter_full,
+    names_to='model',
+    values_to='model_val'
+  ) %>%
+  mutate(
+    mae=abs(model_val - Y_true) / Y_true,
+    bias=(model_val - Y_true) / Y_true,
+    model=case_when(
+      model == 'Y_no_model' ~ 'No model',
+      model == "Y_hat_node_nonetwork" ~ "Node\n(no network)",
+      model == "Y_hat_node_basic" ~ "Node",
+      model == "Y_hat_node_full" ~ "Node\n(more covariates)",
+      model == "Y_hat_edge_nonetwork" ~ "Dyad\n(no network)",
+      model == "Y_hat_edge_basic" ~ "Dyad",
+      model == "Y_hat_edge_full" ~ "Dyad\n(more covariates)",
+      model == "Y_hat_egoalter_basic" ~ "Ego-alter",
+      model == "Y_hat_egoalter_full" ~ "Ego-alter\n(more covariates)",
+    ),
+    model=factor(
+      model,
+      levels=rev(c(
+        'No model',
+        "Dyad",
+        "Dyad\n(no network)",
+        "Dyad\n(more covariates)",
+        "Node",
+        "Node\n(no network)",
+        "Node\n(more covariates)",
+        "Ego-alter",
+        "Ego-alter\n(more covariates)",
+        "Ego-alter\n(alternate)"
+      ))
+    ),
+    sampling=case_when(
+      sampling == 'deg' ~ 'Prop. to\ndegree',
+      sampling == 'edge' ~ 'Dyad',
+      sampling == 'node' ~ 'Node',
+    ),
+    sampling=factor(
+      sampling,
+      levels=c(
+        'Dyad',
+        'Node',
+        'Prop. to\ndegree'
+      )
+    ),
+    
+    kind=case_when(
+      kind == 'no' ~ 'No homophily',
+      kind == 'low' ~ 'Low homophily',
+      kind == 'main' ~ 'Main simulations',
+      kind == 'x' ~ 'Homophily on X',
+      kind == 'high' ~ 'High homophily',
+      kind == 'low_heterophily' ~ 'Low heterophily',
+      kind == 'main_heterophily' ~ 'Medium heterophily',
+      kind == 'x_heterophily' ~ 'Heterophily on X',
+      kind == 'high_heterophily' ~ 'High heterophily',
+    ),
+    kind=factor(
+      kind,
+      levels=c(
+        'No homophily',
+        'Low homophily',
+        'Main simulations',
+        'Homophily on X',
+        'High homophily',
+        'Low heterophily',
+        'Medium heterophily',
+        'Heterophily on X',
+        'High heterophily'
+      )
+    ),
+  )
+```
+
+```{r}
+mae_table = df_big %>%
+  group_by(model, sampling, kind) %>%
+  summarize(
+    mae=percent(mean(mae), accuracy=0.1),
+    bias=percent(mean(bias), accuracy=0.1),
+    h=mean(majority_group_homophily_normalized)
+  ) %>%
+  ungroup() %>%
+  select(model, sampling, mae, kind, h) %>%
+  mutate(
+    sampling=case_when(
+      as.character(sampling) == 'Prop. to\ndegree' ~ '\\thead{Prop. to\\\\degree}',
+      TRUE ~ as.character(sampling)
+    )
+  ) %>%
+  pivot_wider(names_from=model, values_from=mae) %>%
+  select(
+    sampling,
+    kind,
+    h,
+    `No model`,
+    `Dyad`,
+    `Dyad\n(no network)`,
+    `Dyad\n(more covariates)`,
+    `Node\n(no network)`,
+    `Node`,
+    `Node\n(more covariates)`,
+    `Ego-alter`,
+    `Ego-alter\n(more covariates)`,
+  ) %>%
+  rename(
+    Sampling=sampling,
+    Simulation=kind,
+    `\\thead{Maj. grp.\\\\homophily}`=h,
+    `\\thead{Dyad\\\\(no\\\\network)}`=`Dyad\n(no network)`,
+    `\\thead{Dyad\\\\(more\\\\covariates)}`=`Dyad\n(more covariates)`,
+    `\\thead{Node\\\\(no\\\\network)}`=`Node\n(no network)`,
+    `\\thead{Node\\\\(more\\\\covariates)}`=`Node\n(more covariates)`,
+    `\\thead{Ego-alter\\\\(more\\\\covariates)}`=`Ego-alter\n(more covariates)`,
+  )
+
+print(
+  xtable(
+    mae_table,
+    digits=3,
+    caption='Mean absolute error by simulation',
+    include.rownames=F
+  ),
+  include.rownames=FALSE,
+    sanitize.text.function=identity,
+    sanitize.colnames.function = identity,
+)
+```
+
+```{r}
+bias_table = df_big %>%
+  group_by(model, sampling, kind) %>%
+  summarize(
+    mae=percent(mean(mae), accuracy=0.1),
+    bias=percent(mean(bias), accuracy=0.1),
+    h=mean(majority_group_homophily_normalized)
+  ) %>%
+  ungroup() %>%
+  select(model, sampling, bias, kind, h) %>%
+  mutate(
+    sampling=case_when(
+      as.character(sampling) == 'Prop. to\ndegree' ~ '\\thead{Prop. to\\\\degree}',
+      TRUE ~ as.character(sampling)
+    )
+  ) %>%
+  pivot_wider(names_from=model, values_from=bias) %>%
+  select(
+    sampling,
+    kind,
+    h,
+    `No model`,
+    `Dyad`,
+    `Dyad\n(no network)`,
+    `Dyad\n(more covariates)`,
+    `Node\n(no network)`,
+    `Node`,
+    `Node\n(more covariates)`,
+    `Ego-alter`,
+    `Ego-alter\n(more covariates)`,
+  ) %>%
+  rename(
+    Sampling=sampling,
+    Simulation=kind,
+    `\\thead{Maj. grp.\\\\homophily}`=h,
+    `\\thead{Dyad\\\\(no\\\\network)}`=`Dyad\n(no network)`,
+    `\\thead{Dyad\\\\(more\\\\covariates)}`=`Dyad\n(more covariates)`,
+    `\\thead{Node\\\\(no\\\\network)}`=`Node\n(no network)`,
+    `\\thead{Node\\\\(more\\\\covariates)}`=`Node\n(more covariates)`,
+    `\\thead{Ego-alter\\\\(more\\\\covariates)}`=`Ego-alter\n(more covariates)`,
+  )
+
+print(
+  xtable(
+    bias_table,
+    digits=3,
+    caption='Bias by simulation',
+    include.rownames=F
+  ),
+  include.rownames=FALSE,
+    sanitize.text.function=identity,
+    sanitize.colnames.function = identity,
+)
+```
+

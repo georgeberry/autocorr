@@ -1,0 +1,597 @@
+## A minimal example
+
+Example of one full loop of the process, good for developing or understanding
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggraph)
+library(tidygraph)
+library(foreach)
+library(doParallel)
+library(pROC)
+library(caret)
+source("/Users/georgeberry/Dropbox/project-autocorr/autocorr/sim_code.R")
+
+registerDoParallel(cores=12)
+N_SIMS = 100
+N_NODES = 4000
+GROUND_TRUTH_LABELING_BUDGET = 500
+ALPHA = 0.8  # powerlaw exponent
+BETA = 0.7  # strength of homophily
+EDGES_PER_NEW_NODE = 5
+MAJORITY_GROUP_FRAC = 0.7
+```
+
+
+## new graph checks
+
+#### check edgesamp
+
+```{r}
+g = play_bidir_powerlaw_homophily_graph(
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  0.8,
+  0.7
+)
+g = fn_edgesamp(g)
+df_nodes = g %>% activate(nodes) %>% as_tibble()
+df_edges = g %>% activate(edges) %>% as_tibble()
+```
+
+40k nodes, the average GT nodde should be around 20k
+
+```{r}
+df_edges %>%
+  ungroup() %>%
+  mutate(rand_num=1:n()) %>%
+  select(gt, rand_num) %>%
+  summarize(sum(as.integer(gt) * rand_num) / sum(gt))
+```
+
+no multi-edges
+
+```{r}
+max(df_edges %>% group_by(from, to) %>% tally() %>% pull(n))
+```
+
+no self loops
+
+```{r}
+nrow(df_edges %>% filter(from == to))
+```
+
+check on the gt nodes at the edge and node levels to make sure they match
+
+```{r}
+length(unique(c(df_edges %>%
+  filter(gt == 1) %>%
+  pull(name_nbr), df_edges %>%
+  filter(gt == 1) %>%
+  pull(name_ego))))
+```
+
+```{r}
+length(unique(df_nodes %>%
+  filter(gt == 1) %>%
+  pull(name)))
+```
+
+
+```{r}
+setdiff(
+  unique(c(df_edges %>%
+  filter(gt == 1) %>%
+  pull(name_nbr), df_edges %>%
+  filter(gt == 1) %>%
+  pull(name_ego))),
+  df_nodes %>%
+  filter(gt == 1) %>%
+  pull(name)
+)
+```
+
+
+#### check nodesamp
+
+```{r}
+g = play_bidir_powerlaw_homophily_graph(
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  0.8,
+  1.2
+)
+g = fn_nodesamp(g)
+df_nodes = g %>% activate(nodes) %>% as_tibble()
+df_edges = g %>% activate(edges) %>% as_tibble()
+```
+
+should be about 2k
+
+```{r}
+df_nodes %>%
+  mutate(rand_num=1:n()) %>%
+  summarize(sum(rand_num * gt) / sum(gt))
+```
+
+```{r}
+df_edges %>%
+  ungroup() %>%
+  mutate(rand_num=1:n()) %>%
+  select(gt, rand_num) %>%
+  summarize(sum(as.integer(gt) * rand_num) / sum(gt))
+```
+
+
+```{r}
+length(unique(c(df_edges %>%
+  filter(gt_ego == 1) %>%
+  pull(name_ego), df_edges %>%
+  filter(gt_nbr == 1) %>%
+  pull(name_nbr))))
+```
+
+```{r}
+length(unique(df_nodes %>%
+  filter(gt == 1) %>%
+  pull(name)))
+```
+
+```{r}
+setdiff(
+  unique(c(df_edges %>%
+  filter(gt_ego == 1) %>%
+  pull(name_ego), df_edges %>%
+  filter(gt_nbr == 1) %>%
+  pull(name_nbr))),
+  df_nodes %>%
+  filter(gt == 1) %>%
+  pull(name)
+)
+```
+
+
+#### check degsamp
+
+```{r}
+g_orig = play_bidir_powerlaw_homophily_graph(
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  0.8,
+  1.2
+)
+g = fn_degsamp(g_orig)
+df_nodes = g %>% activate(nodes) %>% as_tibble()
+df_edges = g %>% activate(edges) %>% as_tibble()
+```
+
+```{r}
+length(unique(c(df_edges %>%
+  filter(gt_ego == 1) %>%
+  pull(name_ego), df_edges %>%
+  filter(gt_nbr == 1) %>%
+  pull(name_nbr))))
+```
+
+```{r}
+length(unique(df_nodes %>%
+  filter(gt == 1) %>%
+  pull(name)))
+```
+
+```{r}
+setdiff(
+  unique(c(df_edges %>%
+  filter(gt_ego == 1) %>%
+  pull(name_ego), df_edges %>%
+  filter(gt_nbr == 1) %>%
+  pull(name_nbr))),
+  df_nodes %>%
+  filter(gt == 1) %>%
+  pull(name)
+)
+```
+
+
+
+```{r}
+df_nodes %>%
+  mutate(outdeg_rank=cut(rank(outdeg), 10, include.lowest=T)) %>%
+  select(outdeg_rank, gt, outdeg) %>%
+  group_by(outdeg_rank) %>%
+  summarize(gt_prob=mean(gt), n=n(), outdeg=mean(outdeg)) %>%
+  arrange(outdeg)
+
+```
+the rank 5 sampling prob should be n_desired_nodes * 5/deg
+
+```{r}
+GROUND_TRUTH_LABELING_BUDGET * 5 / sum(df_nodes$outdeg)
+```
+
+remember we're sampling w/o replacement in the original, 
+
+#### classic log log plot
+
+ain't bad!
+
+```{r}
+g %>%
+  activate(nodes) %>%
+  as_tibble() %>%
+  mutate(outdeg=outdeg + 0.001 * rnorm(n())) %>%
+  ggplot(aes(x=log(rank(-outdeg)), y=log(outdeg))) +
+  geom_point()
+```
+
+plot a small graph
+
+```{r}
+g = play_bidir_powerlaw_homophily_graph(
+  100,
+  2,
+  0.5,
+  1.0,
+  beta=2.0,
+  gamma=0
+) %>%
+  activate(edges) %>%
+  mutate(
+    Y_ego = .N()$Y[from],
+    Y_nbr = .N()$Y[to],
+    Y_cat = as.integer(Y_ego == Y_nbr)
+  )
+```
+
+
+```{r}
+ggraph(g, layout='kk') +
+  geom_edge_link() + # aes(color=factor(Y_cat))) +.
+  geom_node_point(aes(color=factor(Y)))
+```
+
+```{r}
+ggraph(g, layout='kk') +
+  geom_edge_link() +
+  geom_node_point(aes(color=factor(Y)))
+```
+
+
+### random graph gen test
+
+```{r}
+n_nodes = 10
+majority_group_frac = 0.7
+edges_per_node = 1
+alpha = 0.8
+beta = 0.7
+
+majority_N = round(n_nodes * majority_group_frac)
+majority_Y = rep(1, majority_N)
+majority_X = rnorm(majority_N, 1, 1)
+
+minority_N = round(n_nodes * (1 - majority_group_frac))
+minority_Y = rep(0, minority_N)
+minority_X = rnorm(minority_N, -1, 1)
+
+# Group
+Y = c(majority_Y, minority_Y)
+X = c(majority_X, minority_X)
+
+nodes = 1:n_nodes  # this gives unique ids for each node
+
+node_df = data.frame(
+    Y=Y,
+    X=X
+)
+
+# Degree
+D = list()
+for (node in nodes) {
+    D[[node]] = 0
+}
+
+# seed nodes are chose at random and completely connected (clique)
+# b/c of bidir we do 2 * edges_per_node + 1
+seeds = sample(nodes, 2 * edges_per_node + 1, replace=FALSE)
+
+for (seed in seeds) {
+    D[[seed]] = edges_per_node
+}
+
+edge_df = expand.grid(seeds, seeds)
+colnames(edge_df) = c('from', 'to')
+# filter out self loops
+edge_df = edge_df %>%
+  filter(from != to)
+
+node_iter_order = sample(
+  setdiff(nodes, seeds),
+  length(setdiff(nodes, seeds)),
+  replace=FALSE
+)
+
+for (node in node_iter_order) {
+    node_grp = Y[node]
+    same_grp_nodes = as.integer(Y == node_grp)
+    for (edge_to_add in 1:edges_per_node) {
+        # Determining a connection is a function of
+        # degree, group_Y, Z
+
+        # Using the conditional logit expression in Overgoor et al 2020
+        deg_probs = exp(
+          alpha * log(unlist(D) + 0.001) +
+          beta * same_grp_nodes
+        )
+        probs = deg_probs / sum(deg_probs)
+
+        draw = sample(
+          nodes,
+          1,
+          replace=FALSE,
+          prob=probs
+        )
+        #  no self-loops; no multi-edges
+        while (
+          (draw == node) | 
+          (nrow(edge_df %>% filter(from == node, to == draw)) >= 1)
+        ) {
+            draw = sample(nodes, 1, replace=FALSE, prob=probs)
+        }
+
+        edge_df = bind_rows(
+            edge_df,
+            data.frame(from=c(node, draw), to=c(draw, node))
+        )
+        D[[node]] = D[[node]] + 1
+        D[[draw]] = D[[draw]] + 1
+    }
+}
+tmp = as_tbl_graph(edge_df)  %>%
+  activate(nodes) %>%
+  mutate(
+      Y=Y[as.integer(name)],
+      X=X[as.integer(name)]
+  )
+```
+
+```{r}
+tmp %>%
+  activate(edges) %>%
+  mutate(
+    X_ego = .N()$X[from]
+  )
+```
+
+
+
+
+
+
+### Testing implications of sampling proportional to node degree
+
+```{r}
+df_nodes %>%
+  select(name, outdeg) %>%
+  mutate(
+    pr=outdeg/sum(outdeg),
+  ) -> tmp
+
+samp = sample(tmp$name, 1000, replace=FALSE, prob=tmp$pr)
+
+df_edges %>%
+  mutate(
+    idx=1:n()
+  ) %>%
+  filter(
+    from %in% samp
+  ) %>%
+  summarize(mean(idx))
+```
+
+
+### Example output data
+
+```{r}
+df = read_csv(
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_graph_main_nodesamp.csv'
+)
+```
+
+```{r}
+df %>% summarize_all(mean)
+```
+
+### homophily calc
+
+```{r}
+  tmp = df_edges %>%
+    filter(Y_ego == 1) %>%
+    group_by(Y_ego, Y_nbr) %>%
+    tally()
+  ingroup_links = tmp %>% filter(Y_ego == 1, Y_nbr == 1) %>% pull(n)
+  crossgroup_links = tmp %>% filter(Y_ego == 1, Y_nbr == 0) %>% pull(n)
+  # divide the ingroup links by 2 to avoid double counting
+  actual = ingroup_links / (ingroup_links + crossgroup_links)
+  (actual - MAJORITY_GROUP_FRAC) / (1 - MAJORITY_GROUP_FRAC)
+```
+
+```{r}
+  tmp = df_edges %>%
+    filter(Y_ego == 0) %>%
+    group_by(Y_ego, Y_nbr) %>%
+    tally()
+  ingroup_links = tmp %>% filter(Y_ego == 0, Y_nbr == 0) %>% pull(n)
+  crossgroup_links = tmp %>% filter(Y_ego == 0, Y_nbr == 1) %>% pull(n)
+  actual = ingroup_links / (ingroup_links + crossgroup_links)
+  (actual - 0.3) / (1 - 0.3)
+```
+
+
+#### Estimate number of nodes in majority group
+
+
+```{r}
+g = play_bidir_powerlaw_homophily_graph(
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  0.8,
+  0.7
+)
+g = fn_edgesamp(g)
+df_nodes = g %>% activate(nodes) %>% as_tibble()
+df_edges = g %>% activate(edges) %>% as_tibble()
+```
+
+```{r}
+sum(df_nodes$Y)
+```
+
+```{r}
+mod = lm(Y ~ X, df_nodes %>% filter(gt == 1))
+df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+sum(df_nodes$Y_hat)
+```
+
+```{r}
+mod = lm(
+  Y ~ X,
+  df_nodes %>%
+    filter(gt == 1) %>%
+    mutate(wght = outdeg),
+  weights=wght
+)
+df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+sum(df_nodes$Y_hat)
+```
+
+```{r}
+mod = lm(
+  Y ~ X,
+  df_nodes %>%
+    filter(gt == 1) %>%
+    mutate(wght = 1 / outdeg),
+  weights=wght
+)
+df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+sum(df_nodes$Y_hat)
+```
+
+```{r}
+mod = lm(
+  Y ~ X,
+  df_nodes %>%
+    filter(gt == 1) %>%
+    mutate(wght = 0.5 * (1 / outdeg + outdeg / sum(outdeg))),
+  weights=wght
+)
+df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+sum(df_nodes$Y_hat)
+```
+
+```{r}
+fn_fit_nodes_quant_models = function(g_with_samp) {
+  df_nodes = g_with_samp %>% activate(nodes) %>% as_tibble()
+  df_edges = g_with_samp %>% activate(edges) %>% as_tibble()
+
+  Y_sum_true = sum(df_nodes$Y)
+  
+  mod = lm(Y ~ X, df_nodes %>% filter(gt == 1))
+  df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+  Y_sum_naive = sum(df_nodes$Y_hat)
+  
+  mod = lm(
+    Y ~ X,
+    df_nodes %>%
+      filter(gt == 1) %>%
+      mutate(wght = outdeg),
+    weights=wght
+  )
+  df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+  Y_sum_outdeg = sum(df_nodes$Y_hat)
+  
+  mod = lm(
+    Y ~ X,
+    df_nodes %>%
+      filter(gt == 1) %>%
+      mutate(wght = 1 / outdeg),
+    weights=wght
+  )
+  df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+  Y_sum_inv_outdeg = sum(df_nodes$Y_hat)
+  
+  mod = lm(
+    Y ~ X,
+    df_nodes %>%
+      filter(gt == 1) %>%
+      mutate(wght = 0.5 * (1 / outdeg + outdeg / sum(outdeg))),
+    weights=wght
+  )
+  df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+  Y_sum_comb = sum(df_nodes$Y_hat)
+  
+  return(
+    data.frame(
+      Y_sum_true=Y_sum_true,
+      Y_sum_naive=Y_sum_naive,
+      Y_sum_outdeg=Y_sum_outdeg,
+      Y_sum_inv_outdeg=Y_sum_inv_outdeg,
+      Y_sum_comb=Y_sum_comb
+    )
+  )
+}
+
+fn_quantify_nodes = function() {
+  g = play_bidir_powerlaw_homophily_graph(
+    N_NODES,
+    EDGES_PER_NEW_NODE,
+    MAJORITY_GROUP_FRAC,
+    ALPHA,
+    BETA,
+    0
+  )
+  
+  g_nodesamp = fn_nodesamp(g)
+  df_nodesamp = fn_fit_nodes_quant_models(g_nodesamp)
+
+  g_degsamp = fn_degsamp(g)
+  df_degsamp = fn_fit_nodes_quant_models(g_degsamp)
+
+  g_edgesamp = fn_edgesamp(g)
+  df_edgesamp = fn_fit_nodes_quant_models(g_edgesamp)
+  
+  return(
+    bind_rows(
+      df_nodesamp %>%
+        mutate(sampling='node'),
+      df_degsamp %>%
+        mutate(sampling='deg'),
+      df_edgesamp %>%
+        mutate(sampling='edge')
+    )
+  )
+}
+
+
+
+```
+
+```{r}
+reps = fn_par_run(
+  fn_quantify_nodes,
+  200
+)
+```
+
+```{r}
+reps %>%
+  select(-rep) %>%
+  group_by(sampling) %>%
+  summarize_if(is.numeric, c('mean'=mean, 'sd'=sd)) %>%
+  View()
+```
+
