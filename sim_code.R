@@ -506,7 +506,12 @@ fn_fit_models = function(g_with_samp) {
   #majority_group_homophily = (actual - MAJORITY_GROUP_FRAC) / (1 - MAJORITY_GROUP_FRAC)
 
   majority_group_homophily = sum(df_edges$outdeg_inv_ego * df_edges$Y) / sum(df_nodes$Y)
-  majority_group_homophily_normalized = (majority_group_homophily - MAJORITY_GROUP_FRAC) / (1 - MAJORITY_GROUP_FRAC)
+  if (majority_group_homophily - MAJORITY_GROUP_FRAC >= 0) {
+    majority_group_homophily_normalized = (majority_group_homophily - MAJORITY_GROUP_FRAC) / (1 - MAJORITY_GROUP_FRAC)
+  } else {
+    majority_group_homophily_normalized = (majority_group_homophily - MAJORITY_GROUP_FRAC) / MAJORITY_GROUP_FRAC
+  }
+  
 
   return(
     data.frame( 

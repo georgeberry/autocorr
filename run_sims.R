@@ -1,6 +1,6 @@
 source("sim_code.R")
 
-registerDoParallel(cores=12)
+registerDoParallel(cores=7)
 N_SIMS = 100
 N_NODES = 4000
 GROUND_TRUTH_LABELING_BUDGET = 500
@@ -115,6 +115,78 @@ df_perf = fn_par_run(
 write_csv(
   df_perf,
   '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_perf.csv'
+)
+
+#### HETEROPHILY ###############################################################
+
+df_new_runs_low_heterophily = fn_par_run(
+  fn_run_sims,
+  N_SIMS,
+
+  # sim params
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  ALPHA,
+  beta=-0.4,
+  gamma=0.0
+)
+write_csv(
+  df_new_runs_low_heterophily,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_low_heterophily.csv'
+)
+
+df_new_runs_main_heterophily = fn_par_run(
+  fn_run_sims,
+  N_SIMS,
+
+  # sim params
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  ALPHA,
+  beta=-BETA,
+  gamma=0.0
+)
+write_csv(
+  df_new_runs_main_heterophily,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_main_heterophily.csv'
+)
+
+
+df_new_runs_high_heterophily = fn_par_run(
+  fn_run_sims,
+  N_SIMS,
+
+  # sim params
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  ALPHA,
+  beta=-1.2,
+  gamma=0.0
+)
+write_csv(
+  df_new_runs_high_heterophily,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_high_heterophily.csv'
+)
+
+
+df_new_runs_x_heterophily = fn_par_run(
+  fn_run_sims,
+  N_SIMS,
+
+  # sim params
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  ALPHA,
+  beta=0.0,
+  gamma=-0.35
+)
+write_csv(
+  df_new_runs_x_heterophily,
+  '/Users/georgeberry/Dropbox/project-autocorr/data/new_sims_x_heterophily.csv'
 )
 
 

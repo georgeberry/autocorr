@@ -372,10 +372,10 @@ p3 = df_p %>%
     metric == 'accuracy',
     sampling == 'Prop. to\ndegree'
   ) %>% 
-  ggplot(aes(x=val, y=mae, color=model)) +
+  ggplot(aes(x=val, y=mae, color=model, shape=model)) +
   geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
   geom_jitter(size=3, width=0.000) +
-  guides(color = FALSE) +
+  guides(color = FALSE, shape=FALSE) +
   lims(x=c(0.84, 0.89), y=c(-0.01, 0.1)) +
   labs(
     title='Abs. error by accuracy',
@@ -400,10 +400,10 @@ p4 = df_p %>%
     metric == 'auc',
     sampling == 'Prop. to\ndegree'
   ) %>% 
-  ggplot(aes(x=val, y=mae, color=model)) +
+  ggplot(aes(x=val, y=mae, color=model, shape=model)) +
   geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
   geom_jitter(size=3, width=0.000) +
-  guides(color = FALSE) +
+  guides(color = FALSE, shape=FALSE) +
   lims(x=c(0.9, 0.95), y=c(-0.01, 0.1)) +
   labs(
     title='Abs. error by AUC',
@@ -428,10 +428,10 @@ p5 = df_p %>%
     metric == 'accuracy',
     sampling == 'Prop. to\ndegree'
   ) %>% 
-  ggplot(aes(x=val, y=bias, color=model)) +
+  ggplot(aes(x=val, y=bias, color=model, shape=model)) +
   geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
   geom_jitter(size=3, width=0.000) +
-  guides(color = FALSE) +
+  guides(color = FALSE, shape=FALSE) +
   lims(x=c(0.84, 0.89), y=c(-0.1, 0.01)) +
   labs(
     title='Bias by Accuracy',
@@ -456,10 +456,10 @@ p6 = df_p %>%
     sampling == 'Prop. to\ndegree'
   ) %>% 
   rename(Model=model) %>%
-  ggplot(aes(x=val, y=bias, color=Model)) +
+  ggplot(aes(x=val, y=bias, color=Model, shape=Model)) +
   geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
   geom_jitter(size=3, width=0.000) +
-  guides(color = guide_legend(reverse=T)) +
+  guides(color = guide_legend(reverse=T), shape = guide_legend(reverse=T)) +
   lims(x=c(0.9, 0.95), y=c(-0.1, 0.01)) +
   labs(
     title='Bias by AUC',
@@ -521,11 +521,11 @@ p7 = df_big %>%
     bias=mean(bias),
     h=mean(majority_group_homophily_normalized)
   ) %>%
-  ggplot(aes(x=h, y=bias, color=Model)) +
+  ggplot(aes(x=h, y=bias, color=Model, shape=Model)) +
   geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
   geom_line() +
   geom_point(size=3) +
-  guides(color = guide_legend(reverse=T)) +
+  guides(color = guide_legend(reverse=T), shape=guide_legend(reverse=T)) +
   theme_cowplot() +
   scale_color_manual(values=palette) +
   labs(
@@ -559,9 +559,10 @@ p8 = df_big %>%
     sampling=='Dyad',
     kind != 'Homophily on X'
   ) %>% 
+  rename(Model=model) %>%
   group_by(
     sampling,
-    model,
+    Model,
     kind
   ) %>%
   summarize(
@@ -569,11 +570,11 @@ p8 = df_big %>%
     bias=mean(bias),
     h=mean(majority_group_homophily_normalized)
   ) %>%
-  ggplot(aes(x=h, y=mae, color=model)) +
+  ggplot(aes(x=h, y=mae, color=Model, shape=Model)) +
   geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
   geom_line() +
   geom_point(size=3) +
-  guides(color = FALSE) +
+  guides(color = FALSE, shape = FALSE) +
   theme_cowplot() +
   labs(
     title='Absolute error by level of homophily',
@@ -646,11 +647,11 @@ p9 = df_big %>%
     bias=mean(bias),
     h=mean(majority_group_homophily_normalized)
   ) %>%
-  ggplot(aes(x=kind, y=bias, color=Model)) +
+  ggplot(aes(x=kind, y=bias, color=Model, shape=Model)) +
   geom_hline(yintercept = 0, linetype='dotdash', alpha=0.5) +
   geom_point(size=3) +
   theme_cowplot() +
-  guides(colour = guide_legend(reverse=T)) +
+  guides(colour = guide_legend(reverse=T), shape = guide_legend(reverse=T)) +
   scale_color_manual(values=palette) +
   labs(
     title='Bias by source of homophily',
@@ -737,122 +738,5 @@ ggsave(
   device='pdf',
   width=7.94,
   height=3.29
-)
-```
-
-
-
-#### MAKE TABLES FOR THE CURIOUS
-
-sim/level on the y axis, model on the x axis
-
-```{r}
-mae_table = df_big %>%
-  group_by(model, sampling, kind) %>%
-  summarize(
-    mae=mean(mae),
-    bias=mean(bias),
-    h=mean(majority_group_homophily_normalized)
-  ) %>%
-  ungroup() %>%
-  select(model, sampling, mae, kind, h) %>%
-  mutate(
-    sampling=case_when(
-      as.character(sampling) == 'Prop. to\ndegree' ~ '\\thead{Prop. to\\\\degree}',
-      TRUE ~ as.character(sampling)
-    )
-  ) %>%
-  pivot_wider(names_from=model, values_from=mae) %>%
-  select(
-    sampling,
-    kind,
-    h,
-    `No model`,
-    `Dyad`,
-    `Dyad\n(no network)`,
-    `Dyad\n(more covariates)`,
-    `Node\n(no network)`,
-    `Node`,
-    `Node\n(more covariates)`,
-    `Ego-alter`,
-    `Ego-alter\n(more covariates)`,
-  ) %>%
-  rename(
-    Sampling=sampling,
-    Simulation=kind,
-    `\\thead{Maj. grp.\\\\homophily}`=h,
-    `\\thead{Dyad\\\\(no\\\\network)}`=`Dyad\n(no network)`,
-    `\\thead{Dyad\\\\(more\\\\covariates)}`=`Dyad\n(more covariates)`,
-    `\\thead{Node\\\\(no\\\\network)}`=`Node\n(no network)`,
-    `\\thead{Node\\\\(more\\\\covariates)}`=`Node\n(more covariates)`,
-    `\\thead{Ego-alter\\\\(more\\\\covariates)}`=`Ego-alter\n(more covariates)`,
-  )
-
-print(
-  xtable(
-    mae_table,
-    digits=3,
-    caption='Mean absolute error by simulation',
-    include.rownames=F
-  ),
-  include.rownames=FALSE,
-    sanitize.text.function=identity,
-    sanitize.colnames.function = identity,
-)
-```
-
-
-```{r}
-bias_table = df_big %>%
-  group_by(model, sampling, kind) %>%
-  summarize(
-    mae=mean(mae),
-    bias=mean(bias),
-    h=mean(majority_group_homophily_normalized)
-  ) %>%
-  ungroup() %>%
-  select(model, sampling, bias, kind, h) %>%
-  mutate(
-    sampling=case_when(
-      as.character(sampling) == 'Prop. to\ndegree' ~ '\\thead{Prop. to\\\\degree}',
-      TRUE ~ as.character(sampling)
-    )
-  ) %>%
-  pivot_wider(names_from=model, values_from=bias) %>%
-  select(
-    sampling,
-    kind,
-    h,
-    `No model`,
-    `Dyad`,
-    `Dyad\n(no network)`,
-    `Dyad\n(more covariates)`,
-    `Node\n(no network)`,
-    `Node`,
-    `Node\n(more covariates)`,
-    `Ego-alter`,
-    `Ego-alter\n(more covariates)`,
-  ) %>%
-  rename(
-    Sampling=sampling,
-    Simulation=kind,
-    `\\thead{Maj. grp.\\\\homophily}`=h,
-    `\\thead{Dyad\\\\(no\\\\network)}`=`Dyad\n(no network)`,
-    `\\thead{Dyad\\\\(more\\\\covariates)}`=`Dyad\n(more covariates)`,
-    `\\thead{Node\\\\(no\\\\network)}`=`Node\n(no network)`,
-    `\\thead{Node\\\\(more\\\\covariates)}`=`Node\n(more covariates)`,
-    `\\thead{Ego-alter\\\\(more\\\\covariates)}`=`Ego-alter\n(more covariates)`,
-  )
-
-print(
-  xtable(
-    bias_table,
-    digits=3,
-    caption='Bias by simulation',
-    include.rownames=F
-  ),
-  include.rownames=FALSE,
-    sanitize.text.function=identity,
-    sanitize.colnames.function = identity,
 )
 ```

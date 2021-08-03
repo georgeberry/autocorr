@@ -117,6 +117,15 @@ df_nodes %>%
 ```
 
 ```{r}
+df_edges %>%
+  ungroup() %>%
+  mutate(rand_num=1:n()) %>%
+  select(gt, rand_num) %>%
+  summarize(sum(as.integer(gt) * rand_num) / sum(gt))
+```
+
+
+```{r}
 length(unique(c(df_edges %>%
   filter(gt_ego == 1) %>%
   pull(name_ego), df_edges %>%
@@ -419,5 +428,170 @@ df %>% summarize_all(mean)
   crossgroup_links = tmp %>% filter(Y_ego == 0, Y_nbr == 1) %>% pull(n)
   actual = ingroup_links / (ingroup_links + crossgroup_links)
   (actual - 0.3) / (1 - 0.3)
+```
+
+
+#### Estimate number of nodes in majority group
+
+
+```{r}
+g = play_bidir_powerlaw_homophily_graph(
+  N_NODES,
+  EDGES_PER_NEW_NODE,
+  MAJORITY_GROUP_FRAC,
+  0.8,
+  0.7
+)
+g = fn_edgesamp(g)
+df_nodes = g %>% activate(nodes) %>% as_tibble()
+df_edges = g %>% activate(edges) %>% as_tibble()
+```
+
+```{r}
+sum(df_nodes$Y)
+```
+
+```{r}
+mod = lm(Y ~ X, df_nodes %>% filter(gt == 1))
+df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+sum(df_nodes$Y_hat)
+```
+
+```{r}
+mod = lm(
+  Y ~ X,
+  df_nodes %>%
+    filter(gt == 1) %>%
+    mutate(wght = outdeg),
+  weights=wght
+)
+df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+sum(df_nodes$Y_hat)
+```
+
+```{r}
+mod = lm(
+  Y ~ X,
+  df_nodes %>%
+    filter(gt == 1) %>%
+    mutate(wght = 1 / outdeg),
+  weights=wght
+)
+df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+sum(df_nodes$Y_hat)
+```
+
+```{r}
+mod = lm(
+  Y ~ X,
+  df_nodes %>%
+    filter(gt == 1) %>%
+    mutate(wght = 0.5 * (1 / outdeg + outdeg / sum(outdeg))),
+  weights=wght
+)
+df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+sum(df_nodes$Y_hat)
+```
+
+```{r}
+fn_fit_nodes_quant_models = function(g_with_samp) {
+  df_nodes = g_with_samp %>% activate(nodes) %>% as_tibble()
+  df_edges = g_with_samp %>% activate(edges) %>% as_tibble()
+
+  Y_sum_true = sum(df_nodes$Y)
+  
+  mod = lm(Y ~ X, df_nodes %>% filter(gt == 1))
+  df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+  Y_sum_naive = sum(df_nodes$Y_hat)
+  
+  mod = lm(
+    Y ~ X,
+    df_nodes %>%
+      filter(gt == 1) %>%
+      mutate(wght = outdeg),
+    weights=wght
+  )
+  df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+  Y_sum_outdeg = sum(df_nodes$Y_hat)
+  
+  mod = lm(
+    Y ~ X,
+    df_nodes %>%
+      filter(gt == 1) %>%
+      mutate(wght = 1 / outdeg),
+    weights=wght
+  )
+  df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+  Y_sum_inv_outdeg = sum(df_nodes$Y_hat)
+  
+  mod = lm(
+    Y ~ X,
+    df_nodes %>%
+      filter(gt == 1) %>%
+      mutate(wght = 0.5 * (1 / outdeg + outdeg / sum(outdeg))),
+    weights=wght
+  )
+  df_nodes$Y_hat = predict(mod, newdata=df_nodes)
+  Y_sum_comb = sum(df_nodes$Y_hat)
+  
+  return(
+    data.frame(
+      Y_sum_true=Y_sum_true,
+      Y_sum_naive=Y_sum_naive,
+      Y_sum_outdeg=Y_sum_outdeg,
+      Y_sum_inv_outdeg=Y_sum_inv_outdeg,
+      Y_sum_comb=Y_sum_comb
+    )
+  )
+}
+
+fn_quantify_nodes = function() {
+  g = play_bidir_powerlaw_homophily_graph(
+    N_NODES,
+    EDGES_PER_NEW_NODE,
+    MAJORITY_GROUP_FRAC,
+    ALPHA,
+    BETA,
+    0
+  )
+  
+  g_nodesamp = fn_nodesamp(g)
+  df_nodesamp = fn_fit_nodes_quant_models(g_nodesamp)
+
+  g_degsamp = fn_degsamp(g)
+  df_degsamp = fn_fit_nodes_quant_models(g_degsamp)
+
+  g_edgesamp = fn_edgesamp(g)
+  df_edgesamp = fn_fit_nodes_quant_models(g_edgesamp)
+  
+  return(
+    bind_rows(
+      df_nodesamp %>%
+        mutate(sampling='node'),
+      df_degsamp %>%
+        mutate(sampling='deg'),
+      df_edgesamp %>%
+        mutate(sampling='edge')
+    )
+  )
+}
+
+
+
+```
+
+```{r}
+reps = fn_par_run(
+  fn_quantify_nodes,
+  200
+)
+```
+
+```{r}
+reps %>%
+  select(-rep) %>%
+  group_by(sampling) %>%
+  summarize_if(is.numeric, c('mean'=mean, 'sd'=sd)) %>%
+  View()
 ```
 
